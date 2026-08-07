@@ -1,0 +1,758 @@
+// ---------------------------------------------------------------------------
+// Xamvaad — data model
+//
+// Core hierarchy (PRD Part 4):
+//   Board -> Exam -> ExamSession (date + shift) -> Post -> Comment
+//
+// The wireframes add two structures the PRD only listed as future work:
+//   * ExamStage      — the exam lifecycle stepper on the Exam Hub screen
+//   * Question / ObjectionVote — the Objection Tracker
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+  // Generated into the source tree so it is importable as "@/prisma/client".
+  output   = "../src/prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Guest is not stored — an unauthenticated visitor simply has no User row.
+enum Role {
+  USER
+  MODERATOR
+  BOARD_MODERATOR
+  ADMIN
+}
+
+/// The PRD lists five post types; the wireframe create-post picker shows four
+/// (Discussion, Poll, Memory Question, Official Update). We support the union
+/// so neither document is contradicted — the picker chooses which to surface.
+enum PostType {
+  DISCUSSION
+  POLL
+  MEMORY_QUESTION
+  EXPECTED_CUTOFF
+  OFFICIAL_UPDATE
+  /// Challenges a specific question's official answer. Only postable while the
+  /// exam's objection window is open, and the only type that carries the
+  /// objection meter.
+  OBJECTION_QUESTION
+}
+
+/// Reservation categories common to SSC, IBPS, RRB and most State PSCs.
+enum ExamCategory {
+  GENERAL
+  EWS
+  OBC
+  SC
+  ST
+}
+
+/// How an Expected Cutoff prediction was arrived at. A coaching institute's
+/// figure and a gut feeling should not look identical to a reader.
+enum CutoffBasis {
+  MULTI_SHIFT
+  OWN_SHIFT
+  COACHING
+  GUESS
+}
+
+/// How accurately the author believes they have reproduced a remembered
+/// question. Drives the recall meter on Memory Question cards.
+///
+/// This is a claim about the *wording*, not about the answer — a candidate can
+/// be certain of the question and still not know what the answer is.
+enum RecallConfidence {
+  EXACT /// word-for-word
+  NEAR_EXACT /// wording may differ slightly
+  PARTIAL /// key numbers and idea are right
+  ROUGH /// details may be wrong
+}
+
+enum PostStatus {
+  ACTIVE
+  HIDDEN /// held by moderation, author can still see it
+  REMOVED /// soft-deleted; row retained for audit (PRD: content retention)
+}
+
+/// What kind of test a phase is.
+///
+/// Only WRITTEN phases have an answer key, and therefore an objection window
+/// and a tracker. A Physical Efficiency Test or a Document Verification has
+/// nothing to challenge, so those tabs are hidden rather than shown empty.
+enum PhaseKind {
+  WRITTEN /// Tier 1, CBT 1, Prelims, Mains
+  SKILL_TEST /// typing, stenography, computer proficiency
+  PHYSICAL /// PET / PST
+  INTERVIEW
+  DOCUMENT_VERIFICATION
+}
+
+/// Exam lifecycle stepper — Exam Hub screen (wireframe 04).
+///
+/// Note the naming: a *stage* is a step in one phase's lifecycle, a *phase* is
+/// a tier of the exam itself. "SSC CGL 2026 Tier 2" is a phase; "objection
+/// window" is a stage within it.
+enum ExamStage {
+  CONDUCTED
+  ANSWER_KEY_RELEASED
+  OBJECTION_WINDOW
+  FINAL_KEY
+  RESULT
+}
+
+enum StageStatus {
+  DONE
+  ACTIVE
+  PENDING
+}
+
+/// A vote on whether a question's official answer should be challenged.
+enum ObjectionStance {
+  OBJECT /// "Yes, Raise Objection"
+  CORRECT /// "No, Answer is Correct"
+}
+
+enum TagKind {
+  AUTO /// derived from post metadata: #SSC #CGL #25July #Shift2
+  MANUAL /// author-supplied optional tags: #Maths #Reasoning
+}
+
+enum NotificationType {
+  COMMENT_REPLY
+  POST_COMMENT
+  POST_LIKE
+  MENTION
+  OBJECTION_MILESTONE
+  OFFICIAL_UPDATE
+  MODERATION
+}
+
+enum ReportReason {
+  SPAM
+  DUPLICATE
+  MISINFORMATION
+  ABUSE
+  OFF_TOPIC
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  ACTIONED
+  DISMISSED
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  username     String   @unique
+  email        String   @unique
+  passwordHash String? /// null for Google-only accounts
+  googleId     String?  @unique
+  image        String?
+  bio          String?
+  role     Role    @default(USER)
+  isBanned Boolean @default(false)
+
+  /// Null while banned means permanent; a date means a temporary suspension
+  /// that lapses on its own. A first offence rarely deserves a life sentence.
+  bannedUntil DateTime?
+  banReason   String?
+  bannedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  posts          Post[]
+  comments       Comment[]
+  postLikes      PostLike[]
+  commentLikes   CommentLike[]
+  savedPosts     SavedPost[]
+  pollVotes      PollVote[]
+  objectionVotes ObjectionVote[]
+  questionMarks  QuestionMark[]
+  cutoffEstimates CutoffEstimate[]
+  profileImage    ProfileImage?
+  auditLogs       AuditLog[]       @relation("AuditActor")
+  notifications  Notification[]  @relation("NotificationRecipient")
+  actedOn        Notification[]  @relation("NotificationActor")
+  reportsFiled   Report[]        @relation("Reporter")
+  reportsClosed  Report[]        @relation("Resolver")
+  moderatorOf    BoardModerator[]
+
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Taxonomy: Board -> Exam -> ExamSession
+// ---------------------------------------------------------------------------
+
+model Board {
+  id          String   @id @default(cuid())
+  slug        String   @unique /// "ssc", "rrb", "ibps"
+  name        String /// "SSC"
+  fullName    String /// "Staff Selection Commission"
+  description String?
+  icon        String? /// lucide icon name rendered in the board rail
+  color       String? /// hex accent used by board chips
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  exams      Exam[]
+  posts      Post[]
+  moderators BoardModerator[]
+
+  @@index([sortOrder])
+}
+
+/// An uploaded profile picture.
+///
+/// Kept in its own table so that ordinary `User` queries never drag the image
+/// bytes along with them. Stored in Postgres rather than on disk because the
+/// app has no object storage and a container's filesystem does not survive a
+/// redeploy — the bytes are small (resized to 256px in the browser before
+/// upload) and are served with an immutable cache header.
+model ProfileImage {
+  userId    String   @id
+  data      Bytes
+  mimeType  String
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BoardModerator {
+  id        String   @id @default(cuid())
+  boardId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId])
+}
+
+model Exam {
+  id          String   @id @default(cuid())
+  slug        String   @unique /// "ssc-cgl-2024"
+  boardId     String
+  name        String /// "SSC CGL 2024"
+  shortName   String /// "CGL"
+  year        Int
+  description String?
+  isActive    Boolean  @default(true) /// drives the "Today's Active Exams" home list
+
+  /// Archived: read-only and hidden from active listings, but never deleted
+  /// and still fully searchable — "Permanent Knowledge" is a product principle.
+  archivedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  board     Board         @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  phases    ExamPhase[]
+  sessions  ExamSession[]
+  posts     Post[]
+  questions Question[]
+
+  @@index([boardId, isActive])
+}
+
+/// One tier of an exam — "Tier 1", "CBT 2", "Prelims", "Interview".
+///
+/// Almost every competitive exam is several exams in a trench coat: SSC CGL
+/// has Tier 1 and Tier 2, RRB NTPC has CBT 1, CBT 2 and DV, IBPS PO has
+/// Prelims, Mains and Interview. Each runs on its own dates, publishes its own
+/// answer key and opens its own objection window months apart from the others,
+/// so the lifecycle belongs here rather than on Exam.
+///
+/// Names are free text because the vocabulary differs per board — SSC says
+/// "Tier", RRB says "CBT", banking says "Prelims".
+model ExamPhase {
+  id          String    @id @default(cuid())
+  examId      String
+  slug        String /// "tier-1", "cbt-2", "prelims"
+  name        String /// "Tier 1", "CBT 2", "Prelims"
+  shortName   String /// "T1", "CBT2", "Pre"
+  kind        PhaseKind @default(WRITTEN)
+  sequence    Int       @default(1) /// Tier 2 cannot precede Tier 1
+  description String?
+  createdAt   DateTime  @default(now())
+
+  exam      Exam             @relation(fields: [examId], references: [id], onDelete: Cascade)
+  sessions  ExamSession[]
+  stages    ExamStageEntry[]
+  posts     Post[]
+  questions Question[]
+
+  @@unique([examId, slug])
+  @@unique([examId, sequence])
+  @@index([examId, sequence])
+}
+
+/// One sitting of a phase: a specific date + shift.
+model ExamSession {
+  id      String   @id @default(cuid())
+  phaseId String
+  /// Denormalised from the phase so exam-wide feeds don't need a second join.
+  examId  String
+  date    DateTime @db.Date
+  shift   String /// "Shift 1", "Shift 2", "All Shifts"
+  label   String? /// optional display override
+
+  phase     ExamPhase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  posts     Post[]
+  questions Question[]
+
+  @@unique([phaseId, date, shift])
+  @@index([examId, date])
+  @@index([phaseId, date])
+}
+
+/// One node of the lifecycle stepper for an exam.
+/// One node of the lifecycle stepper, for one phase.
+model ExamStageEntry {
+  id      String    @id @default(cuid())
+  phaseId String
+  stage   ExamStage
+
+  /// Manual override only.
+  ///
+  /// The displayed status is normally derived from the dates below (see
+  /// lib/lifecycle.ts) so that a window opens and closes on its own. Exam
+  /// authorities routinely deviate from their own schedule, so an admin can
+  /// pin a status here; null means "follow the dates".
+  statusOverride StageStatus?
+
+  startsAt  DateTime?
+  endsAt    DateTime? /// objection windows are ranges: "25 - 30 Jul"
+  note      String?
+  sortOrder Int          @default(0)
+
+  /// Set the first time this stage's start was announced to aspirants, and
+  /// again for its end. Editing a date twice must not re-notify everyone.
+  startAnnouncedAt DateTime?
+  endAnnouncedAt   DateTime?
+
+  phase ExamPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  @@unique([phaseId, stage])
+  @@index([phaseId, sortOrder])
+}
+
+// ---------------------------------------------------------------------------
+// Content
+// ---------------------------------------------------------------------------
+
+model Post {
+  id        String     @id @default(cuid())
+  authorId  String
+  boardId   String
+  examId String
+  /// Which tier this is about. Null only for posts that genuinely span the
+  /// whole exam; a shift-scoped post always has one.
+  phaseId   String?
+  sessionId String? /// null when a post spans all shifts of its phase
+  type      PostType
+  title     String
+  body      String     @db.Text
+  status    PostStatus @default(ACTIVE)
+  isPinned  Boolean    @default(false)
+
+  /// Denormalised counters — feeds sort on these, so we avoid N+1 aggregates.
+  likeCount    Int @default(0)
+  commentCount Int @default(0)
+  viewCount    Int @default(0)
+
+  /// Set when the post is tied to a tracked question in the objection index.
+  questionId String?
+
+  /// Memory Questions only: how well the author claims to recall the wording.
+  recallConfidence RecallConfidence?
+
+  /// Expected Cutoff only: how the author arrived at their numbers.
+  cutoffBasis CutoffBasis?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  editedAt  DateTime? /// PRD business rule: edits are visible, not silent
+  deletedAt DateTime?
+
+  /// Why a moderator hid or removed this, shown to the author. Silent removal
+  /// is what makes moderation feel arbitrary — "Trust Over Noise".
+  moderationReason String?
+  moderatedById    String?
+  moderatedAt      DateTime?
+
+  author   User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  board    Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  exam     Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  phase    ExamPhase?   @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  session  ExamSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  question Question?    @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  comments Comment[]
+  likes    PostLike[]
+  saves    SavedPost[]
+  tags     PostTag[]
+  reports  Report[]
+  poll     Poll?
+  notifications Notification[]
+  cutoffPredictions CutoffPrediction[]
+  cutoffEstimates   CutoffEstimate[]
+
+  @@index([boardId, status, createdAt])
+  @@index([examId, type, status, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([status, likeCount])
+}
+
+model Tag {
+  id    String  @id @default(cuid())
+  name  String  @unique /// stored without '#', lowercase: "ssc", "25july", "maths"
+  label String /// display form: "SSC", "25July", "Maths"
+  kind  TagKind @default(AUTO)
+
+  posts PostTag[]
+}
+
+model PostTag {
+  postId String
+  tagId  String
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  postId    String
+  authorId  String
+  parentId  String? /// one level of threading — "Reply" in the wireframe
+  body      String    @db.Text
+  likeCount Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  editedAt  DateTime?
+  deletedAt DateTime?
+
+  post     Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author   User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent   Comment?      @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[]     @relation("CommentThread")
+  likes    CommentLike[]
+  reports  Report[]
+  notifications Notification[]
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+}
+
+// ---------------------------------------------------------------------------
+// Engagement
+// ---------------------------------------------------------------------------
+
+model PostLike {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model CommentLike {
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@index([commentId])
+}
+
+model SavedPost {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Polls (wireframes 06, 11)
+// ---------------------------------------------------------------------------
+
+model Poll {
+  id       String    @id @default(cuid())
+  postId   String    @unique
+  question String
+  closesAt DateTime?
+
+  post    Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  options PollOption[]
+  votes   PollVote[]
+}
+
+model PollOption {
+  id        String @id @default(cuid())
+  pollId    String
+  label     String /// "A", "B", "C", "D" or free text
+  text      String? /// optional longer description of the option
+  sortOrder Int    @default(0)
+  voteCount Int    @default(0)
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@index([pollId, sortOrder])
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// One vote per user per poll.
+  @@unique([pollId, userId])
+  @@index([optionId])
+}
+
+// ---------------------------------------------------------------------------
+// Expected Cutoff
+// ---------------------------------------------------------------------------
+
+/// One category row of the author's predicted cutoff.
+model CutoffPrediction {
+  id       String       @id @default(cuid())
+  postId   String
+  category ExamCategory
+  marks    Float
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, category])
+  @@index([postId])
+}
+
+/// A reader's own predicted cutoff for their category.
+///
+/// One estimate per user per post: aspirants predict the cutoff for the
+/// category they are competing in, so a single row captures the intent and
+/// keeps the card from turning into a form.
+model CutoffEstimate {
+  id        String       @id @default(cuid())
+  postId    String
+  userId    String
+  category  ExamCategory
+  marks     Float
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId, category])
+}
+
+// ---------------------------------------------------------------------------
+// Objection Tracker (wireframes 07-11)
+// ---------------------------------------------------------------------------
+
+/// A numbered question from a specific exam sitting, with the official answer
+/// as published in the answer key. This is the unit the community challenges.
+model Question {
+  id        String @id @default(cuid())
+  examId    String
+  /// Denormalised from the session: the tracker lists and filters by phase.
+  phaseId   String
+  sessionId String
+  number         Int /// "Question 46"
+  text           String? @db.Text
+  subject        String? /// "Maths", "GK", "Reasoning"
+  officialAnswer String? /// answer key value, e.g. "B"
+  finalAnswer    String? /// revised value after the final key, if changed
+  isResolved     Boolean @default(false)
+
+  /// Denormalised objection tallies so the tracker list sorts without joins.
+  objectVotes  Int @default(0)
+  correctVotes Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exam    Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  phase   ExamPhase       @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  session ExamSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  votes   ObjectionVote[]
+  posts   Post[]
+  options QuestionOption[]
+  marks   QuestionMark[]
+
+  @@unique([sessionId, number])
+  @@index([examId, objectVotes])
+}
+
+/// One lettered choice (A-D) of a tracked question.
+///
+/// Options hang off Question rather than Post: several posts can discuss the
+/// same numbered question, and they must all show the same choices and the
+/// same community tallies.
+model QuestionOption {
+  id         String @id @default(cuid())
+  questionId String
+  label      String /// "A", "B", "C", "D"
+  text       String /// the choice itself, e.g. "36"
+  sortOrder  Int    @default(0)
+
+  /// Denormalised tally of how many people marked this option in the exam.
+  markCount Int @default(0)
+
+  question Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  marks    QuestionMark[]
+
+  @@unique([questionId, label])
+  @@index([questionId, sortOrder])
+}
+
+/// What one user actually marked in the exam — the "What did you mark?" panel.
+///
+/// Distinct from ObjectionVote: marking records what you answered, objecting
+/// records whether you think the official key is wrong. A user can mark the
+/// same option as the key and still believe the question should be dropped.
+model QuestionMark {
+  id         String   @id @default(cuid())
+  questionId String
+  optionId   String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  question Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  option   QuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// One mark per user per question.
+  @@unique([questionId, userId])
+  @@index([optionId])
+}
+
+/// A user's stance on one question. Displayed anonymously ("Your vote is
+/// anonymous") — we still store userId to enforce one vote per user, but no
+/// API ever exposes the voter list.
+model ObjectionVote {
+  id         String          @id @default(cuid())
+  questionId String
+  userId     String
+  stance     ObjectionStance
+  createdAt  DateTime        @default(now())
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, userId])
+  @@index([questionId, stance])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications & moderation
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String /// recipient
+  actorId   String? /// who triggered it; null for system notices
+  type      NotificationType
+  message   String
+  postId    String?
+  commentId String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user    User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor   User?    @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+}
+
+/// Who did what, when, and why.
+///
+/// Every destructive or authoritative admin action writes one row: hiding a
+/// post, banning a user, moving an exam date, publishing a key. With more than
+/// one moderator this is the only way to settle a dispute, and it is far
+/// cheaper to add now than to reconstruct later.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?  /// null if the actor's account was later deleted
+  action     String /// "post.hide", "user.ban", "exam.stage.update"
+  targetType String /// "Post", "User", "Exam", "Question"
+  targetId   String
+  summary    String /// human-readable, rendered directly in the admin UI
+  reason     String?
+  metadata   Json? /// before/after values where useful
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+  @@index([actorId, createdAt])
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  postId     String?
+  commentId  String?
+  reason     ReportReason
+  details    String?
+  status     ReportStatus @default(OPEN)
+  resolvedById String?
+  resolvedAt DateTime?
+  createdAt  DateTime     @default(now())
+
+  reporter   User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolvedBy User?    @relation("Resolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  post       Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment    Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  /// A user may report a given post or comment only once.
+  @@unique([reporterId, postId])
+  @@unique([reporterId, commentId])
+  @@index([status, createdAt])
+}
