@@ -1,16 +1,15 @@
 import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { buildAuthUrl, googleConfigured } from "@/lib/google";
+import { appOrigin, buildAuthUrl, googleConfigured } from "@/lib/google";
 import { handler } from "@/lib/api";
 
 export const GET = handler(async () => {
   if (!googleConfigured()) {
     // Send the visitor back to a real screen with a readable message rather
     // than dumping JSON in the browser window.
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     return NextResponse.redirect(
-      `${base}/login?error=${encodeURIComponent(
+      `${appOrigin()}/login?error=${encodeURIComponent(
         "Google sign-in isn't configured yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env, then restart the dev server."
       )}`
     );

@@ -16,9 +16,27 @@ export function googleConfigured(): boolean {
   );
 }
 
+/**
+ * The public origin this deployment is reachable at.
+ *
+ * Google matches `redirect_uri` character for character against the list in
+ * the Cloud console, so this has to be exact. Trailing slashes are stripped
+ * because pasting the URL out of a browser bar is how they get in, and
+ * "https://x.vercel.app//api/auth/google/callback" fails that match with no
+ * useful error.
+ *
+ * Falling back to localhost is right for `npm run dev` and wrong everywhere
+ * else: unset in production, the sign-in flow sends people to a machine that
+ * isn't theirs. Set NEXT_PUBLIC_APP_URL on the host.
+ */
+export function appOrigin(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  return "http://localhost:3000";
+}
+
 export function redirectUri(): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base}/api/auth/google/callback`;
+  return `${appOrigin()}/api/auth/google/callback`;
 }
 
 export function buildAuthUrl(state: string): string {

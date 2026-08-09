@@ -3,14 +3,12 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { handler } from "@/lib/api";
 import { createSession } from "@/lib/auth";
-import { exchangeCodeForProfile, googleConfigured } from "@/lib/google";
+import { appOrigin, exchangeCodeForProfile, googleConfigured } from "@/lib/google";
 import { generateUsername } from "@/lib/username";
-
-const appUrl = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 function backToLogin(reason: string) {
   return NextResponse.redirect(
-    `${appUrl()}/login?error=${encodeURIComponent(reason)}`
+    `${appOrigin()}/login?error=${encodeURIComponent(reason)}`
   );
 }
 
@@ -64,5 +62,5 @@ export const GET = handler(async (req: Request) => {
   }
 
   await createSession(user.id);
-  return NextResponse.redirect(appUrl() + "/");
+  return NextResponse.redirect(appOrigin() + "/");
 });
