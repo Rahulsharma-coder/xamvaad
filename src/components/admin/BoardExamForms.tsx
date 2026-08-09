@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
-import { api } from "@/lib/client";
+import { api, ApiClientError } from "@/lib/client";
 import { Field, inputClass } from "./ui";
+import { useSelectedId } from "./useSelectedId";
 
 /** Slugs are derived from the name so admins don't hand-craft URL strings. */
 function slugify(value: string): string {
@@ -127,17 +128,19 @@ export function NewExamForm({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [boardId, setBoardId] = useState(boards[0]?.id ?? "");
+  const [boardId, setBoardId] = useSelectedId(boards);
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setFieldErrors({});
     try {
       await api("/api/admin/exams", {
         method: "POST",
@@ -148,6 +151,11 @@ export function NewExamForm({
       setOpen(false);
       router.refresh();
     } catch (err) {
+      // "Validation failed" on its own tells the admin nothing. The API sends
+      // the offending fields alongside it; surface them.
+      if (err instanceof ApiClientError && err.details) {
+        setFieldErrors(err.details as Record<string, string[]>);
+      }
       setError(err instanceof Error ? err.message : "Could not create it.");
     } finally {
       setBusy(false);
@@ -225,6 +233,14 @@ export function NewExamForm({
       </p>
 
       {error && <p className="mt-2 text-xs text-object">{error}</p>}
+      {Object.entries(fieldErrors).map(([field, messages]) => (
+        <p key={field} className="mt-1 text-xs text-object">
+          <span className="font-semibold capitalize">
+            {field.replace(/([A-Z])/g, " $1").toLowerCase()}
+          </span>
+          : {messages.join("; ")}
+        </p>
+      ))}
 
       <div className="mt-3 flex gap-2">
         <button

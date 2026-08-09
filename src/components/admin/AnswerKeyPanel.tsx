@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, TriangleAlert } from "lucide-react";
 import { api } from "@/lib/client";
 import { Field, inputClass } from "./ui";
+import { useSelectedId } from "./useSelectedId";
 
 type Session = { id: string; label: string; questionCount: number };
 
@@ -57,7 +58,7 @@ export function AnswerKeyPanel({
   sessions: Session[];
 }) {
   const router = useRouter();
-  const [sessionId, setSessionId] = useState(sessions[0]?.id ?? "");
+  const [sessionId, setSessionId] = useSelectedId(sessions);
   const [keyType, setKeyType] = useState<"PROVISIONAL" | "FINAL">("PROVISIONAL");
   const [raw, setRaw] = useState("");
   const [busy, setBusy] = useState(false);

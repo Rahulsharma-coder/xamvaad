@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import { Field, inputClass } from "./ui";
+import { useSelectedId } from "./useSelectedId";
 
 type Session = {
   id: string;
@@ -30,7 +31,7 @@ export function ShiftManager({
   phases: { id: string; name: string; sessions: Session[] }[];
 }) {
   const router = useRouter();
-  const [phaseId, setPhaseId] = useState(phases[0]?.id ?? "");
+  const [phaseId, setPhaseId] = useSelectedId(phases);
   const [dates, setDates] = useState("");
   const [shifts, setShifts] = useState("Shift 1, Shift 2");
   const [busy, setBusy] = useState(false);
