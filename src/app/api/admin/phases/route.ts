@@ -4,6 +4,7 @@ import { assertBoardAllowed, requireAdminApi } from "@/lib/admin";
 import { audit } from "@/lib/audit";
 import { phaseSchema } from "@/lib/adminValidation";
 import { STAGE_ORDER } from "@/lib/lifecycle";
+import { slugify } from "@/lib/slug";
 
 /**
  * POST /api/admin/phases — add a tier to an exam.
@@ -26,6 +27,17 @@ export const POST = handler(async (req: Request) => {
     throw new ApiError(409, "This exam is archived. Restore it before editing.");
   }
 
+  // Derived here, exactly as the exam route derives its first phase's. Taking
+  // it from the client meant the same phase name was accepted in one place and
+  // refused in the other.
+  const slug = input.slug ?? slugify(input.name);
+  if (!slug) {
+    throw new ApiError(
+      400,
+      `"${input.name}" has no letters or numbers to make a name from. Try something like "Tier 2".`
+    );
+  }
+
   // The next free slot is one past the highest in use, not one past the count.
   // Those differ the moment a phase is deleted, and the count is what the form
   // used to send.
@@ -37,14 +49,14 @@ export const POST = handler(async (req: Request) => {
   const sequence = input.sequence ?? (last ? last.sequence + 1 : 1);
 
   const clash = await db.examPhase.findFirst({
-    where: { examId: exam.id, OR: [{ slug: input.slug }, { sequence }] },
+    where: { examId: exam.id, OR: [{ slug }, { sequence }] },
     select: { slug: true, sequence: true },
   });
   if (clash) {
     throw new ApiError(
       409,
-      clash.slug === input.slug
-        ? `This exam already has a phase called "${input.slug}".`
+      clash.slug === slug
+        ? `This exam already has a phase called "${input.name}".`
         : `This exam already has a phase at position ${sequence}.`
     );
   }
@@ -52,7 +64,7 @@ export const POST = handler(async (req: Request) => {
   const phase = await db.examPhase.create({
     data: {
       examId: exam.id,
-      slug: input.slug,
+      slug,
       name: input.name,
       shortName: input.shortName,
       kind: input.kind,

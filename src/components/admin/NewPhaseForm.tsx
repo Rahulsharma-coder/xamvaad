@@ -6,7 +6,6 @@ import { Loader2, Plus } from "lucide-react";
 import { api } from "@/lib/client";
 import { Field, inputClass } from "./ui";
 import { PHASE_KIND_LABEL, PHASE_PRESETS } from "@/lib/phases";
-import { slugify } from "@/lib/slug";
 import type { PhaseKind } from "@/prisma/client";
 
 const KINDS: PhaseKind[] = [
@@ -46,7 +45,9 @@ export function NewPhaseForm({ examId }: { examId: string }) {
     try {
       await api("/api/admin/phases", {
         method: "POST",
-        json: { examId, slug: slugify(name), name, shortName, kind },
+        // No slug and no position: the API derives both. Sending either meant
+        // the form could fail validation on a field it never showed.
+        json: { examId, name, shortName, kind },
       });
       setName("");
       setShortName("");

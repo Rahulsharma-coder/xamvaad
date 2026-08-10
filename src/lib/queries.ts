@@ -283,18 +283,35 @@ export async function getActiveExams(take = 8) {
     },
   });
 
-  // "12.4K discussing" — posts plus comments on those posts.
-  const withActivity = await Promise.all(
-    exams.map(async (exam) => {
-      const comments = await db.comment.count({
-        where: { post: { examId: exam.id }, deletedAt: null },
-      });
-      return {
-        ...exam,
-        discussing: exam._count.posts + comments,
-      };
-    })
-  );
+  // "12.4K discussing" — visible posts plus the comments on them.
+  //
+  // The comment filter has to reach through to the post: a comment on a removed
+  // post is unreachable, and counting it advertised discussion that isn't
+  // there. Its own `deletedAt` says nothing about whether its parent survives.
+  //
+  // One query for every exam rather than one per exam. That mattered less when
+  // this was written; with the database a continent away from the functions,
+  // eight serial round trips are the page's slowest part.
+  const commentCounts = await db.post.findMany({
+    where: { examId: { in: exams.map((e) => e.id) }, ...VISIBLE_POST },
+    select: {
+      examId: true,
+      _count: { select: { comments: { where: { deletedAt: null } } } },
+    },
+  });
+
+  const commentsByExam = new Map<string, number>();
+  for (const post of commentCounts) {
+    commentsByExam.set(
+      post.examId,
+      (commentsByExam.get(post.examId) ?? 0) + post._count.comments
+    );
+  }
+
+  const withActivity = exams.map((exam) => ({
+    ...exam,
+    discussing: exam._count.posts + (commentsByExam.get(exam.id) ?? 0),
+  }));
 
   return withActivity
     .sort((a, b) => b.discussing - a.discussing)

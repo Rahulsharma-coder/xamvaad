@@ -120,13 +120,22 @@ export const examSchema = z.object({
 /** A tier of an exam: Tier 1, CBT 2, Prelims, Interview. */
 export const phaseSchema = z.object({
   examId: z.string().min(1, "Choose an exam"),
+  /**
+   * Optional, and normally omitted: the API derives it from the name.
+   *
+   * The form used to send it, which meant a phase named "A" was accepted when
+   * creating an exam — where the slug is derived — and rejected when adding
+   * one later, because this minimum was two characters. The refusal named a
+   * `slug` field that appears nowhere in the interface.
+   */
   slug: z
     .string()
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers and hyphens")
-    .min(2)
-    .max(40),
+    .min(1)
+    .max(40)
+    .optional(),
   name: z.string().trim().min(1).max(60),
   shortName: z.string().trim().min(1).max(20),
   kind: z.enum([

@@ -56,7 +56,13 @@ export default async function AdminTaxonomyPage() {
         id: true,
         label: true,
         kind: true,
-        _count: { select: { posts: true } },
+        // Tags on removed posts are still tagged rows. Counting them made a
+        // tag look worth keeping when nothing visible carries it.
+        _count: {
+          select: {
+            posts: { where: { post: { status: "ACTIVE", deletedAt: null } } },
+          },
+        },
       },
     }),
   ]);
