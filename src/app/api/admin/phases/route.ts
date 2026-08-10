@@ -26,11 +26,18 @@ export const POST = handler(async (req: Request) => {
     throw new ApiError(409, "This exam is archived. Restore it before editing.");
   }
 
+  // The next free slot is one past the highest in use, not one past the count.
+  // Those differ the moment a phase is deleted, and the count is what the form
+  // used to send.
+  const last = await db.examPhase.findFirst({
+    where: { examId: exam.id },
+    orderBy: { sequence: "desc" },
+    select: { sequence: true },
+  });
+  const sequence = input.sequence ?? (last ? last.sequence + 1 : 1);
+
   const clash = await db.examPhase.findFirst({
-    where: {
-      examId: exam.id,
-      OR: [{ slug: input.slug }, { sequence: input.sequence }],
-    },
+    where: { examId: exam.id, OR: [{ slug: input.slug }, { sequence }] },
     select: { slug: true, sequence: true },
   });
   if (clash) {
@@ -38,7 +45,7 @@ export const POST = handler(async (req: Request) => {
       409,
       clash.slug === input.slug
         ? `This exam already has a phase called "${input.slug}".`
-        : `This exam already has a phase at position ${input.sequence}.`
+        : `This exam already has a phase at position ${sequence}.`
     );
   }
 
@@ -49,7 +56,7 @@ export const POST = handler(async (req: Request) => {
       name: input.name,
       shortName: input.shortName,
       kind: input.kind,
-      sequence: input.sequence,
+      sequence,
       description: input.description ?? null,
       stages: {
         create: STAGE_ORDER.map((stage, index) => ({

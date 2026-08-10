@@ -136,7 +136,17 @@ export const phaseSchema = z.object({
     "INTERVIEW",
     "DOCUMENT_VERIFICATION",
   ]),
-  sequence: z.number().int().min(1).max(20),
+  /**
+   * Position in the exam's order. Optional, and normally omitted: the server
+   * assigns the next free slot.
+   *
+   * The form used to compute this as `phases.length + 1`, which is only right
+   * while no phase has ever been deleted. Remove Phase 1 from an exam that
+   * also has Tier 1 at position 2 and the count says "2" — a position already
+   * taken — so adding the next tier failed on a number the admin never chose
+   * and could not see.
+   */
+  sequence: z.number().int().min(1).max(20).optional(),
   description: z.string().trim().max(300).optional().nullable(),
 });
 

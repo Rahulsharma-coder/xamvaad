@@ -19,13 +19,12 @@ const KINDS: PhaseKind[] = [
 
 const PRESETS = PHASE_PRESETS;
 
-export function NewPhaseForm({
-  examId,
-  nextSequence,
-}: {
-  examId: string;
-  nextSequence: number;
-}) {
+/**
+ * Position is deliberately absent: the server appends to the end. The form
+ * cannot know the next free slot without reasoning about deleted phases, and
+ * getting it wrong produced an error naming a number the admin never chose.
+ */
+export function NewPhaseForm({ examId }: { examId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -47,14 +46,7 @@ export function NewPhaseForm({
     try {
       await api("/api/admin/phases", {
         method: "POST",
-        json: {
-          examId,
-          slug: slugify(name),
-          name,
-          shortName,
-          kind,
-          sequence: nextSequence,
-        },
+        json: { examId, slug: slugify(name), name, shortName, kind },
       });
       setName("");
       setShortName("");
