@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { api } from "@/lib/client";
 import { Field, inputClass } from "./ui";
-import { PHASE_KIND_LABEL } from "@/lib/phases";
+import { PHASE_KIND_LABEL, PHASE_PRESETS } from "@/lib/phases";
+import { slugify } from "@/lib/slug";
 import type { PhaseKind } from "@/prisma/client";
 
 const KINDS: PhaseKind[] = [
@@ -16,32 +17,7 @@ const KINDS: PhaseKind[] = [
   "DOCUMENT_VERIFICATION",
 ];
 
-/** Common tier names, so an admin doesn't retype "Tier 2" for every exam. */
-const PRESETS = [
-  { name: "Tier 1", short: "T1", kind: "WRITTEN" as const },
-  { name: "Tier 2", short: "T2", kind: "WRITTEN" as const },
-  { name: "CBT 1", short: "CBT1", kind: "WRITTEN" as const },
-  { name: "CBT 2", short: "CBT2", kind: "WRITTEN" as const },
-  { name: "Prelims", short: "Pre", kind: "WRITTEN" as const },
-  { name: "Mains", short: "Mains", kind: "WRITTEN" as const },
-  { name: "Typing Test", short: "TST", kind: "SKILL_TEST" as const },
-  { name: "PET / PST", short: "PET", kind: "PHYSICAL" as const },
-  { name: "Interview", short: "Int", kind: "INTERVIEW" as const },
-  {
-    name: "Document Verification",
-    short: "DV",
-    kind: "DOCUMENT_VERIFICATION" as const,
-  },
-];
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
+const PRESETS = PHASE_PRESETS;
 
 export function NewPhaseForm({
   examId,

@@ -19,6 +19,33 @@ export const PHASE_KIND_LABEL: Record<PhaseKind, string> = {
 };
 
 /**
+ * Names real exams actually use for their phases.
+ *
+ * Shared between the new-exam form, which names the exam's first phase, and
+ * the add-a-phase form. No exam anywhere calls its first sitting "Phase 1":
+ * SSC runs Tiers, RRB runs CBTs, banking runs Prelims and Mains, and a
+ * single-paper exam like CTET has no tier at all — hence "Written Exam".
+ */
+export const PHASE_PRESETS: {
+  name: string;
+  short: string;
+  kind: PhaseKind;
+}[] = [
+  { name: "Tier 1", short: "T1", kind: "WRITTEN" },
+  { name: "Tier 2", short: "T2", kind: "WRITTEN" },
+  { name: "CBT 1", short: "CBT1", kind: "WRITTEN" },
+  { name: "CBT 2", short: "CBT2", kind: "WRITTEN" },
+  { name: "Prelims", short: "Pre", kind: "WRITTEN" },
+  { name: "Mains", short: "Mains", kind: "WRITTEN" },
+  { name: "Paper 1", short: "P1", kind: "WRITTEN" },
+  { name: "Written Exam", short: "Exam", kind: "WRITTEN" },
+  { name: "Typing Test", short: "TST", kind: "SKILL_TEST" },
+  { name: "PET / PST", short: "PET", kind: "PHYSICAL" },
+  { name: "Interview", short: "Int", kind: "INTERVIEW" },
+  { name: "Document Verification", short: "DV", kind: "DOCUMENT_VERIFICATION" },
+];
+
+/**
  * Only a written paper has an answer key, and therefore questions to remember,
  * challenge or poll about. A Physical Efficiency Test has nothing to object
  * to, so those tabs are hidden rather than shown empty.

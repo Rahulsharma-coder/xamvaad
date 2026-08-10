@@ -80,6 +80,14 @@ export const boardSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+const PHASE_KINDS = [
+  "WRITTEN",
+  "SKILL_TEST",
+  "PHYSICAL",
+  "INTERVIEW",
+  "DOCUMENT_VERIFICATION",
+] as const;
+
 export const examSchema = z.object({
   boardId: z.string().min(1, "Choose a board"),
   slug: z
@@ -94,6 +102,19 @@ export const examSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   description: z.string().trim().max(300).optional().nullable(),
   isActive: z.boolean().optional(),
+  /**
+   * What to call the exam's first phase. Every exam is created with one so it
+   * is immediately usable, and it used to be hardcoded as "Phase 1" — a name
+   * no real exam uses. Optional so older callers still work; the API falls
+   * back to a written first sitting.
+   */
+  firstPhase: z
+    .object({
+      name: z.string().trim().min(1, "Name the first phase").max(60),
+      shortName: z.string().trim().min(1).max(20),
+      kind: z.enum(PHASE_KINDS),
+    })
+    .optional(),
 });
 
 /** A tier of an exam: Tier 1, CBT 2, Prelims, Interview. */

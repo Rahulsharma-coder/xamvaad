@@ -4,6 +4,7 @@ import { requireFullAdminApi } from "@/lib/admin";
 import { audit } from "@/lib/audit";
 import { examSchema } from "@/lib/adminValidation";
 import { STAGE_ORDER } from "@/lib/lifecycle";
+import { slugify } from "@/lib/slug";
 
 /**
  * POST /api/admin/exams — create an exam.
@@ -24,6 +25,16 @@ export const POST = handler(async (req: Request) => {
   if (!board) throw new ApiError(404, "That board no longer exists.");
   if (clash) throw new ApiError(409, `An exam with slug "${input.slug}" exists.`);
 
+  // A new exam starts with one phase so it is immediately usable; further
+  // tiers are added from the exam's admin page. The admin names it, because
+  // "Phase 1" is not what anything is called — SSC sits Tiers, RRB sits CBTs,
+  // and a single-paper exam has no tier to speak of.
+  const first = input.firstPhase ?? {
+    name: "Written Exam",
+    shortName: "Exam",
+    kind: "WRITTEN" as const,
+  };
+
   const exam = await db.exam.create({
     data: {
       boardId: input.boardId,
@@ -32,14 +43,14 @@ export const POST = handler(async (req: Request) => {
       shortName: input.shortName,
       year: input.year,
       description: input.description ?? null,
-      // A new exam starts with one written phase so it is immediately usable;
-      // further tiers are added from the exam's admin page.
       phases: {
         create: {
-          slug: "phase-1",
-          name: "Phase 1",
-          shortName: "P1",
-          kind: "WRITTEN",
+          // Derived here rather than taken from the client, so the phase slug
+          // cannot arrive in a shape the schema would reject.
+          slug: slugify(first.name) || "phase-1",
+          name: first.name,
+          shortName: first.shortName,
+          kind: first.kind,
           sequence: 1,
           stages: {
             create: STAGE_ORDER.map((stage, index) => ({

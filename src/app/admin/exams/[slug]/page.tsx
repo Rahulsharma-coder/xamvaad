@@ -11,6 +11,7 @@ import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
 import { AnswerKeyPanel } from "@/components/admin/AnswerKeyPanel";
 import { ArchiveButton } from "@/components/admin/ArchiveButton";
 import { NewPhaseForm } from "@/components/admin/NewPhaseForm";
+import { DeleteButton } from "@/components/admin/DeleteButton";
 import { examDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +117,13 @@ export default async function AdminExamDetail({ params }: Props) {
               examName={exam.name}
               archived={Boolean(exam.archivedAt)}
             />
+            {/* Archive is the answer for an exam people have used; this only
+                succeeds on one created by mistake, with nothing filed under it. */}
+            <DeleteButton
+              endpoint={`/api/admin/exams/${exam.id}`}
+              label={exam.name}
+              redirectTo="/admin/boards"
+            />
           </div>
         }
       />
@@ -197,9 +205,18 @@ export default async function AdminExamDetail({ params }: Props) {
                   {status.label}
                 </Badge>
                 <Badge>{PHASE_KIND_LABEL[phase.kind]}</Badge>
-                <span className="ml-auto text-[11px] text-ink-muted">
-                  {phase.sessions.length} shifts · {phase._count.posts} posts ·{" "}
-                  {phase._count.questions} questions
+                <span className="ml-auto flex items-center gap-3">
+                  <span className="text-[11px] text-ink-muted">
+                    {phase.sessions.length} shifts · {phase._count.posts} posts ·{" "}
+                    {phase._count.questions} questions
+                  </span>
+                  {/* Refused if the phase holds anything, or if it is the
+                      exam's last one — posts hang off a phase, so an exam
+                      without any cannot be posted in. */}
+                  <DeleteButton
+                    endpoint={`/api/admin/phases/${phase.id}`}
+                    label={phase.name}
+                  />
                 </span>
               </div>
 

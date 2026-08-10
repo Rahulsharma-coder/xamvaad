@@ -6,16 +6,9 @@ import { Loader2, Plus } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
 import { Field, inputClass } from "./ui";
 import { useSelectedId } from "./useSelectedId";
-
-/** Slugs are derived from the name so admins don't hand-craft URL strings. */
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
+import { slugify } from "@/lib/slug";
+import { PHASE_PRESETS } from "@/lib/phases";
+import type { PhaseKind } from "@/prisma/client";
 
 export function NewBoardForm() {
   const router = useRouter();
@@ -132,6 +125,12 @@ export function NewExamForm({
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
+  // Every exam is created with a first phase. Defaulted to Tier 1 because most
+  // of these boards run tiers, but a single-paper exam picks "Written Exam"
+  // in one click rather than inheriting a name nothing is called.
+  const [phaseName, setPhaseName] = useState("Tier 1");
+  const [phaseShort, setPhaseShort] = useState("T1");
+  const [phaseKind, setPhaseKind] = useState<PhaseKind>("WRITTEN");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -144,7 +143,18 @@ export function NewExamForm({
     try {
       await api("/api/admin/exams", {
         method: "POST",
-        json: { boardId, slug: slugify(name), name, shortName, year },
+        json: {
+          boardId,
+          slug: slugify(name),
+          name,
+          shortName,
+          year,
+          firstPhase: {
+            name: phaseName,
+            shortName: phaseShort,
+            kind: phaseKind,
+          },
+        },
       });
       setName("");
       setShortName("");
@@ -227,7 +237,59 @@ export function NewExamForm({
         </Field>
       </div>
 
-      <p className="mt-2 text-[11px] text-ink-muted">
+      <div className="mt-4 border-t border-hairline pt-3">
+        <p className="text-xs font-semibold text-ink">First phase</p>
+        <p className="mt-0.5 text-[11px] text-ink-muted">
+          What the first sitting is called. Add further tiers from the exam&apos;s
+          own page.
+        </p>
+
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {PHASE_PRESETS.filter((p) => p.kind === "WRITTEN").map((preset) => (
+            <button
+              key={preset.name}
+              type="button"
+              onClick={() => {
+                setPhaseName(preset.name);
+                setPhaseShort(preset.short);
+                setPhaseKind(preset.kind);
+              }}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                phaseName === preset.name
+                  ? "border-brand-400 bg-brand-50 text-brand-700"
+                  : "border-hairline text-ink-muted hover:border-brand-300 hover:text-ink"
+              }`}
+            >
+              {preset.name}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Phase name">
+            <input
+              value={phaseName}
+              onChange={(e) => setPhaseName(e.target.value)}
+              required
+              maxLength={60}
+              placeholder="Tier 1"
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Phase short name" hint="Used in tags, e.g. T1">
+            <input
+              value={phaseShort}
+              onChange={(e) => setPhaseShort(e.target.value)}
+              required
+              maxLength={20}
+              placeholder="T1"
+              className={inputClass}
+            />
+          </Field>
+        </div>
+      </div>
+
+      <p className="mt-3 text-[11px] text-ink-muted">
         The five lifecycle stages are created as TBA. Set their dates from Exam
         Operations.
       </p>
@@ -252,7 +314,7 @@ export function NewExamForm({
         </button>
         <button
           type="submit"
-          disabled={busy || !name || !shortName}
+          disabled={busy || !name || !shortName || !phaseName || !phaseShort}
           className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
         >
           {busy && <Loader2 size={13} className="animate-spin" />}

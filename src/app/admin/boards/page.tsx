@@ -4,6 +4,7 @@ import { requireAdminPage, isAdmin } from "@/lib/admin";
 import { Badge, Card, EmptyRow, PageHeader } from "@/components/admin/ui";
 import { BoardIcon } from "@/components/BoardIcon";
 import { NewBoardForm, NewExamForm } from "@/components/admin/BoardExamForms";
+import { DeleteButton } from "@/components/admin/DeleteButton";
 import { redirect } from "next/navigation";
 
 export const metadata = { title: "Boards & Exams" };
@@ -73,6 +74,13 @@ export default async function AdminBoardsPage() {
                 <span className="shrink-0 text-xs text-ink-muted">
                   {board.exams.length} exams
                 </span>
+                {/* Offered next to every board: the server refuses any that
+                    still hold exams or posts, and says so in the refusal. */}
+                <DeleteButton
+                  endpoint={`/api/admin/boards/${board.id}`}
+                  label={board.name}
+                  className="shrink-0"
+                />
               </div>
 
               {board.exams.length > 0 && (
@@ -93,8 +101,15 @@ export default async function AdminBoardsPage() {
                           <Badge tone="neutral">Archived</Badge>
                         )}
                       </div>
-                      <span className="text-[11px] text-ink-muted">
-                        {exam._count.sessions} shifts · {exam._count.posts} posts
+                      <span className="flex items-center gap-3">
+                        <span className="text-[11px] text-ink-muted">
+                          {exam._count.sessions} shifts · {exam._count.posts}{" "}
+                          posts
+                        </span>
+                        <DeleteButton
+                          endpoint={`/api/admin/exams/${exam.id}`}
+                          label={exam.name}
+                        />
                       </span>
                     </li>
                   ))}
