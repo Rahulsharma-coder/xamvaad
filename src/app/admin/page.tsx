@@ -52,7 +52,11 @@ export default async function AdminDashboard() {
             },
             orderBy: { sequence: "asc" },
           },
-          _count: { select: { posts: true, questions: true } },
+          // Live posts, so the exam card here reads the same as the one on
+          // Exam Operations and as the delete guards.
+          _count: {
+            select: { posts: { where: { deletedAt: null } }, questions: true },
+          },
         },
         orderBy: { createdAt: "desc" },
         take: 12,

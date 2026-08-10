@@ -61,11 +61,24 @@ export type FeedFilters = {
   sort?: "latest" | "top";
 };
 
+/**
+ * A post the public can see.
+ *
+ * Deleting a post soft-deletes it and moderation hides rather than removes, so
+ * the table holds rows nobody can reach. Every public tally has to exclude
+ * them or it advertises content that isn't there — a board card read "2 posts"
+ * when both had been removed, and clicking through showed an empty board.
+ *
+ * Exported so counts and the feed cannot drift apart: they are the same claim
+ * about the same rows, and only one of them is easy to check by eye.
+ */
+export const VISIBLE_POST = {
+  status: "ACTIVE",
+  deletedAt: null,
+} as const satisfies Prisma.PostWhereInput;
+
 export function buildFeedWhere(filters: FeedFilters): Prisma.PostWhereInput {
-  const where: Prisma.PostWhereInput = {
-    status: "ACTIVE",
-    deletedAt: null,
-  };
+  const where: Prisma.PostWhereInput = { ...VISIBLE_POST };
 
   if (filters.boardSlug) where.board = { slug: filters.boardSlug };
   if (filters.examSlug) where.exam = { slug: filters.examSlug };
@@ -189,7 +202,9 @@ export async function getExamBySlug(slug: string) {
           date: true,
           shift: true,
           // Used to pick a sensible default shift — see pickDefaultSession.
-          _count: { select: { posts: true, questions: true } },
+          _count: {
+            select: { posts: { where: VISIBLE_POST }, questions: true },
+          },
         },
         orderBy: [{ date: "desc" }, { shift: "asc" }],
       },
@@ -207,7 +222,9 @@ export async function getExamBySlug(slug: string) {
               date: true,
               shift: true,
               // Used to pick a sensible default shift — see pickDefaultSession.
-              _count: { select: { posts: true, questions: true } },
+              _count: {
+                select: { posts: { where: VISIBLE_POST }, questions: true },
+              },
             },
             orderBy: [{ date: "desc" }, { shift: "asc" }],
           },
@@ -262,7 +279,7 @@ export async function getActiveExams(take = 8) {
         orderBy: { date: "desc" },
         take: 1,
       },
-      _count: { select: { posts: true } },
+      _count: { select: { posts: { where: VISIBLE_POST } } },
     },
   });
 
@@ -296,7 +313,7 @@ export async function getBoards() {
       description: true,
       icon: true,
       color: true,
-      _count: { select: { exams: true, posts: true } },
+      _count: { select: { exams: true, posts: { where: VISIBLE_POST } } },
     },
   });
 }
@@ -325,7 +342,7 @@ export async function getTrackedQuestions(
       correctVotes: true,
       phase: { select: { id: true, slug: true, name: true, shortName: true } },
   session: { select: { id: true, date: true, shift: true } },
-      _count: { select: { posts: true } },
+      _count: { select: { posts: { where: VISIBLE_POST } } },
     },
   });
 

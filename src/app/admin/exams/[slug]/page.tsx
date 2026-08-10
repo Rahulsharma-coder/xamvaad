@@ -71,7 +71,10 @@ export default async function AdminExamDetail({ params }: Props) {
               id: true,
               date: true,
               shift: true,
-              _count: { select: { questions: true, posts: true } },
+              // Live posts, matching the shift-delete guard.
+              _count: {
+                select: { questions: true, posts: { where: { deletedAt: null } } },
+              },
             },
           },
           // Counted the same way the delete guards count, so the number on
