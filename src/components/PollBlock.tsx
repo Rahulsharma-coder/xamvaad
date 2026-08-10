@@ -111,18 +111,30 @@ export function PollBlock({
                 )}
 
                 <span className="relative flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-sm font-medium text-ink">
-                    <span
-                      className={clsx(
-                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold",
-                        isMine
-                          ? "bg-settled text-white"
-                          : "bg-slate-100 text-ink-muted"
-                      )}
-                    >
-                      {option.label}
-                    </span>
-                    {option.text}
+                  <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">
+                    {/* Two shapes share this component. A Memory Question puts
+                        the letter in `label` and the answer in `text`, so the
+                        letter gets a badge. A poll puts the whole answer in
+                        `label` and leaves `text` null — badging that squeezed
+                        "Reasoning" into a 24px box, where the button's
+                        overflow-hidden clipped the first letter off. */}
+                    {option.text ? (
+                      <>
+                        <span
+                          className={clsx(
+                            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold",
+                            isMine
+                              ? "bg-settled text-white"
+                              : "bg-slate-100 text-ink-muted"
+                          )}
+                        >
+                          {option.label}
+                        </span>
+                        <span className="min-w-0 break-words">{option.text}</span>
+                      </>
+                    ) : (
+                      <span className="min-w-0 break-words">{option.label}</span>
+                    )}
                   </span>
 
                   {revealed && (
