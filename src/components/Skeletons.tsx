@@ -82,7 +82,7 @@ export function CommentsSkeleton({ count = 3 }: { count?: number }) {
   );
 }
 
-/** Matches the "Today's Active Exams" rows on the home screen. */
+/** Matches the "Active Exams" rows on the home screen. */
 export function ExamListSkeleton({ count = 4 }: { count?: number }) {
   return (
     <ul className="space-y-2" aria-busy="true" aria-label="Loading exams">

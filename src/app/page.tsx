@@ -37,7 +37,7 @@ export default async function HomePage() {
         <section aria-labelledby="active-exams">
           <div className="mb-3 flex items-center justify-between">
             <h1 id="active-exams" className="text-base font-bold text-ink">
-              Today&apos;s Active Exams
+              Active Exams
             </h1>
             <Link
               href="/search"
@@ -89,7 +89,7 @@ export default async function HomePage() {
   );
 }
 
-/** "Today's Active Exams" — streams behind ExamListSkeleton. */
+/** "Active Exams" — streams behind ExamListSkeleton. */
 async function ActiveExams() {
   const exams = await getActiveExams();
 
