@@ -208,6 +208,8 @@ model Board {
   description String?
   icon        String? /// lucide icon name rendered in the board rail
   color       String? /// hex accent used by board chips
+  /// URL of an uploaded logo, when one exists. Null falls back to `icon`.
+  image       String?
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -215,8 +217,22 @@ model Board {
   exams      Exam[]
   posts      Post[]
   moderators BoardModerator[]
+  logo       BoardImage?
 
   @@index([sortOrder])
+}
+
+/// An uploaded board logo, stored in the database like profile pictures are.
+///
+/// Kept out of `Board` so listing boards never drags the bytes along: the rail
+/// selects a dozen boards on every page load and needs the URL, not the image.
+model BoardImage {
+  boardId   String   @id
+  data      Bytes
+  mimeType  String
+  updatedAt DateTime @updatedAt
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
 }
 
 /// An uploaded profile picture.

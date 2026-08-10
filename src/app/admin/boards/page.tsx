@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminPage, isAdmin } from "@/lib/admin";
 import { Badge, Card, EmptyRow, PageHeader } from "@/components/admin/ui";
-import { BoardIcon } from "@/components/BoardIcon";
+import { BoardLogoUpload } from "@/components/admin/BoardLogoUpload";
 import { NewBoardForm, NewExamForm } from "@/components/admin/BoardExamForms";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { redirect } from "next/navigation";
@@ -25,6 +25,7 @@ export default async function AdminBoardsPage() {
       name: true,
       fullName: true,
       icon: true,
+      image: true,
       color: true,
       isActive: true,
       exams: {
@@ -64,7 +65,15 @@ export default async function AdminBoardsPage() {
           {boards.map((board) => (
             <Card key={board.id}>
               <div className="flex items-center gap-3">
-                <BoardIcon icon={board.icon} color={board.color} size={36} />
+                {/* The tile doubles as the upload control, so the admin sees
+                    the logo in the shape it will actually appear in. */}
+                <BoardLogoUpload
+                  boardId={board.id}
+                  boardName={board.name}
+                  icon={board.icon}
+                  color={board.color}
+                  initialImage={board.image}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h2 className="font-bold text-ink">{board.name}</h2>

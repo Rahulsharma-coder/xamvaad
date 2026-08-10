@@ -94,7 +94,7 @@ export default async function SearchPage({ searchParams }: Props) {
                     href={`/boards/${board.slug}`}
                     className="flex h-full flex-col gap-2 rounded-xl border border-hairline bg-surface p-4 transition hover:border-brand-300"
                   >
-                    <BoardIcon icon={board.icon} color={board.color} size={36} />
+                    <BoardIcon icon={board.icon} color={board.color} image={board.image} size={36} />
                     <span className="font-bold text-ink">{board.name}</span>
                     <span className="text-xs leading-tight text-ink-muted">
                       {board.fullName}

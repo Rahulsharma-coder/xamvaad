@@ -115,6 +115,7 @@ async function ActiveExams() {
               <BoardIcon
                 icon={exam.board.icon}
                 color={exam.board.color}
+                image={exam.board.image}
                 size={40}
               />
 
@@ -151,7 +152,7 @@ async function BoardRail() {
             href={`/boards/${board.slug}`}
             className="flex w-20 flex-col items-center gap-2 text-center"
           >
-            <BoardIcon icon={board.icon} color={board.color} size={48} />
+            <BoardIcon icon={board.icon} color={board.color} image={board.image} size={48} />
             <span className="text-xs font-semibold text-ink">{board.name}</span>
           </Link>
         </li>

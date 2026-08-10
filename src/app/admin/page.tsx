@@ -31,7 +31,7 @@ export default async function AdminDashboard() {
           id: true,
           slug: true,
           name: true,
-          board: { select: { name: true, color: true, icon: true } },
+          board: { select: { name: true, color: true, icon: true, image: true } },
           phases: {
             select: {
               id: true,

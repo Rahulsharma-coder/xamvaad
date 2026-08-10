@@ -273,7 +273,7 @@ export async function getActiveExams(take = 8) {
       slug: true,
       name: true,
       shortName: true,
-      board: { select: { slug: true, name: true, color: true, icon: true } },
+      board: { select: { slug: true, name: true, color: true, icon: true, image: true } },
       sessions: {
         select: { id: true, date: true, shift: true },
         orderBy: { date: "desc" },
@@ -313,6 +313,7 @@ export async function getBoards() {
       description: true,
       icon: true,
       color: true,
+      image: true,
       _count: { select: { exams: true, posts: { where: VISIBLE_POST } } },
     },
   });

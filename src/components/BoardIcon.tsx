@@ -22,10 +22,13 @@ const ICONS: Record<string, LucideIcon> = {
 export function BoardIcon({
   icon,
   color,
+  image,
   size = 40,
 }: {
   icon?: string | null;
   color?: string | null;
+  /** Uploaded logo. Falls back to the lucide icon when absent. */
+  image?: string | null;
   size?: number;
 }) {
   const Icon = (icon && ICONS[icon]) || Landmark;
@@ -34,7 +37,7 @@ export function BoardIcon({
   return (
     <span
       aria-hidden="true"
-      className="inline-flex shrink-0 items-center justify-center rounded-xl"
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-xl"
       style={{
         width: size,
         height: size,
@@ -42,7 +45,21 @@ export function BoardIcon({
         color: tint,
       }}
     >
-      <Icon size={size * 0.5} strokeWidth={2.2} />
+      {image ? (
+        /* object-contain, not cover: a board logo is a mark with its own
+           proportions, and cropping one to fill a square cuts the wordmark
+           off. Padding keeps it clear of the rounded corners.
+           eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={image}
+          alt=""
+          width={size}
+          height={size}
+          className="h-full w-full object-contain p-[12%]"
+        />
+      ) : (
+        <Icon size={size * 0.5} strokeWidth={2.2} />
+      )}
     </span>
   );
 }

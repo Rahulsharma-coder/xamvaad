@@ -28,7 +28,7 @@ export default async function AdminExamsPage({ searchParams }: Props) {
       slug: true,
       name: true,
       archivedAt: true,
-      board: { select: { name: true, color: true, icon: true } },
+      board: { select: { name: true, color: true, icon: true, image: true } },
       phases: {
         select: {
           id: true,

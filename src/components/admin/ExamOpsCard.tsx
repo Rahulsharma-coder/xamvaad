@@ -29,7 +29,12 @@ export type ExamOpsExam = {
   slug: string;
   name: string;
   archivedAt?: Date | null;
-  board: { name: string; color: string | null; icon: string | null };
+  board: {
+    name: string;
+    color: string | null;
+    icon: string | null;
+    image: string | null;
+  };
   phases: ExamOpsPhase[];
   _count: { posts: number; questions: number };
 };
@@ -76,7 +81,7 @@ export function ExamOpsCard({ exam }: { exam: ExamOpsExam }) {
   return (
     <article className="rounded-2xl border border-hairline bg-surface p-4">
       <div className="flex items-center gap-2.5">
-        <BoardIcon icon={exam.board.icon} color={exam.board.color} size={28} />
+        <BoardIcon icon={exam.board.icon} color={exam.board.color} image={exam.board.image} size={28} />
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-bold text-ink">{exam.name}</h3>
           {phase && (

@@ -28,7 +28,7 @@ export default async function BoardsPage() {
                 href={`/boards/${board.slug}`}
                 className="flex items-center gap-3 rounded-xl border border-hairline bg-surface p-4 transition hover:border-brand-300"
               >
-                <BoardIcon icon={board.icon} color={board.color} size={44} />
+                <BoardIcon icon={board.icon} color={board.color} image={board.image} size={44} />
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-ink">{board.name}</p>
                   <p className="truncate text-xs text-ink-muted">

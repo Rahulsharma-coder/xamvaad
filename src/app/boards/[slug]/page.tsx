@@ -47,6 +47,7 @@ export default async function BoardFeedPage({ params, searchParams }: Props) {
       fullName: true,
       description: true,
       icon: true,
+      image: true,
       color: true,
       exams: {
         orderBy: [{ year: "desc" }, { name: "asc" }],
@@ -83,7 +84,7 @@ export default async function BoardFeedPage({ params, searchParams }: Props) {
 
       <main className="mx-auto max-w-3xl px-4 py-4">
         <section className="flex items-center gap-3 rounded-xl border border-hairline bg-surface p-4">
-          <BoardIcon icon={board.icon} color={board.color} size={48} />
+          <BoardIcon icon={board.icon} color={board.color} image={board.image} size={48} />
           <div className="min-w-0">
             <h1 className="font-extrabold text-ink">{board.fullName}</h1>
             {board.description && (
