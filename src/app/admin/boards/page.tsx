@@ -34,7 +34,10 @@ export default async function AdminBoardsPage() {
           name: true,
           year: true,
           archivedAt: true,
-          _count: { select: { posts: true, sessions: true } },
+          // Live posts, matching what the delete guard counts.
+          _count: {
+            select: { posts: { where: { deletedAt: null } }, sessions: true },
+          },
         },
         orderBy: { year: "desc" },
       },

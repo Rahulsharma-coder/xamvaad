@@ -72,7 +72,12 @@ export const DELETE = handler(async (req: Request, ctx: Ctx) => {
       id: true,
       shift: true,
       exam: { select: { name: true, boardId: true } },
-      _count: { select: { posts: true, questions: true } },
+      // Live posts only, as everywhere else: a soft-deleted post keeps its row
+      // so reports and moderation still have a target, but it is gone from the
+      // site and should not lock a shift the admin is trying to correct.
+      _count: {
+        select: { posts: { where: { deletedAt: null } }, questions: true },
+      },
     },
   });
   if (!session) throw new ApiError(404, "That shift no longer exists.");

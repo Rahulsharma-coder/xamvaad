@@ -49,7 +49,10 @@ export default async function AdminExamsPage({ searchParams }: Props) {
         },
         orderBy: { sequence: "asc" },
       },
-      _count: { select: { posts: true, questions: true } },
+      // Live posts, so the exam card agrees with the delete guards.
+      _count: {
+        select: { posts: { where: { deletedAt: null } }, questions: true },
+      },
     },
     orderBy: [{ year: "desc" }, { createdAt: "desc" }],
   });

@@ -33,7 +33,17 @@ export const DELETE = handler(async (_req: Request, ctx: Ctx) => {
           _count: { select: { phases: true } },
         },
       },
-      _count: { select: { posts: true, questions: true, sessions: true } },
+      // Live posts only. Deleting a post soft-deletes it — the row stays so
+      // moderation and reports keep their target — but counting tombstones
+      // means an admin who has cleared every visible post is told the phase
+      // still holds two, with nothing on screen to reconcile that against.
+      _count: {
+        select: {
+          posts: { where: { deletedAt: null } },
+          questions: true,
+          sessions: true,
+        },
+      },
     },
   });
 

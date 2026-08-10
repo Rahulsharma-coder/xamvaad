@@ -36,7 +36,14 @@ export default async function AdminTaxonomyPage() {
                 id: true,
                 date: true,
                 shift: true,
-                _count: { select: { posts: true, questions: true } },
+                // Live posts: this drives the padlock on each shift row, and
+                // it has to agree with what the DELETE endpoint checks.
+                _count: {
+                  select: {
+                    posts: { where: { deletedAt: null } },
+                    questions: true,
+                  },
+                },
               },
             },
           },

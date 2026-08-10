@@ -25,7 +25,11 @@ export const DELETE = handler(async (_req: Request, ctx: Ctx) => {
     select: {
       id: true,
       name: true,
-      _count: { select: { exams: true, posts: true } },
+      // Live posts only, matching the exam and phase guards: a soft-deleted
+      // post is already gone as far as anyone using the site is concerned.
+      _count: {
+        select: { exams: true, posts: { where: { deletedAt: null } } },
+      },
     },
   });
 

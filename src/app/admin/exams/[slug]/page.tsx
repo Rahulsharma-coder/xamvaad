@@ -74,10 +74,19 @@ export default async function AdminExamDetail({ params }: Props) {
               _count: { select: { questions: true, posts: true } },
             },
           },
-          _count: { select: { posts: true, questions: true } },
+          // Counted the same way the delete guards count, so the number on
+          // screen is the number that decides whether a delete is allowed.
+          _count: {
+            select: {
+              posts: { where: { deletedAt: null } },
+              questions: true,
+            },
+          },
         },
       },
-      _count: { select: { posts: true, questions: true } },
+      _count: {
+        select: { posts: { where: { deletedAt: null } }, questions: true },
+      },
     },
   });
 
@@ -88,6 +97,20 @@ export default async function AdminExamDetail({ params }: Props) {
   const unresolved = await db.question.count({
     where: { examId: exam.id, isResolved: false },
   });
+
+  // Soft-deleted posts per phase. Without this a phase whose posts were all
+  // deleted reads "0 posts" and deletes cleanly, which is right — but the
+  // admin who watched it say "2 posts" a minute ago deserves to see where
+  // they went rather than wonder whether the count is lying.
+  const removedByPhase = new Map(
+    (
+      await db.post.groupBy({
+        by: ["phaseId"],
+        where: { examId: exam.id, deletedAt: { not: null } },
+        _count: { _all: true },
+      })
+    ).map((row) => [row.phaseId, row._count._all])
+  );
 
   const totalShifts = exam.phases.reduce((n, p) => n + p.sessions.length, 0);
 
@@ -207,8 +230,14 @@ export default async function AdminExamDetail({ params }: Props) {
                 <Badge>{PHASE_KIND_LABEL[phase.kind]}</Badge>
                 <span className="ml-auto flex items-center gap-3">
                   <span className="text-[11px] text-ink-muted">
-                    {phase.sessions.length} shifts · {phase._count.posts} posts ·{" "}
-                    {phase._count.questions} questions
+                    {phase.sessions.length} shifts · {phase._count.posts} posts
+                    {(removedByPhase.get(phase.id) ?? 0) > 0 && (
+                      <span title="Deleted by their authors or removed by moderation. They no longer block deleting this phase.">
+                        {" "}
+                        ({removedByPhase.get(phase.id)} removed)
+                      </span>
+                    )}{" "}
+                    · {phase._count.questions} questions
                   </span>
                   {/* Refused if the phase holds anything, or if it is the
                       exam's last one — posts hang off a phase, so an exam

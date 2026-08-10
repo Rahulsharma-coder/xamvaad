@@ -26,7 +26,12 @@ export const DELETE = handler(async (_req: Request, ctx: Ctx) => {
       id: true,
       name: true,
       boardId: true,
-      _count: { select: { posts: true, questions: true } },
+      // Live posts only — a soft-deleted one is already invisible to
+      // aspirants, so it should not stand between an admin and a mistake
+      // they are trying to undo.
+      _count: {
+        select: { posts: { where: { deletedAt: null } }, questions: true },
+      },
     },
   });
 
