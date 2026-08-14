@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { OPTION_LABELS } from "./rules";
+import { STAGE_LABEL } from "./lifecycle";
 
 /** Schemas for the admin API. Kept apart so the public rules stay readable. */
 
@@ -18,7 +19,14 @@ export const STAGE_KEYS = [
  */
 const dayString = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date")
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "use a date like 2026-12-01")
+  // A date input will happily hand back a five-digit or two-digit year when
+  // the field is typed into rather than picked, and the shape check above
+  // passes anything with four digits — including year 0206.
+  .refine((value) => {
+    const year = Number(value.slice(0, 4));
+    return year >= 2000 && year <= 2100;
+  }, "the year looks wrong — check the date")
   .nullable()
   .optional();
 
@@ -47,16 +55,20 @@ export const updateStagesSchema = z
      */
     suppressAnnouncements: z.boolean().optional(),
   })
-  .refine(
-    (data) =>
-      data.stages.every(
-        (s) =>
-          !s.startsAt ||
-          !s.endsAt ||
-          new Date(s.endsAt) >= new Date(s.startsAt)
-      ),
-    { message: "A stage cannot end before it starts", path: ["stages"] }
-  );
+  // Per stage rather than once for the set, so the message can name the row
+  // that is wrong. "A stage cannot end before it starts" leaves an admin
+  // looking at five rows with no idea which one to correct.
+  .superRefine((data, ctx) => {
+    data.stages.forEach((stage, index) => {
+      if (!stage.startsAt || !stage.endsAt) return;
+      if (new Date(stage.endsAt) >= new Date(stage.startsAt)) return;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stages", index, "endsAt"],
+        message: `${STAGE_LABEL[stage.stage]} ends before it starts`,
+      });
+    });
+  });
 
 export const boardSchema = z.object({
   slug: z

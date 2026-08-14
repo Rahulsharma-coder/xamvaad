@@ -38,12 +38,32 @@ export function handler<Args extends unknown[]>(
         return fail(err.status, err.message);
       }
       if (err instanceof ZodError) {
-        return fail(422, "Validation failed", err.flatten().fieldErrors);
+        return fail(422, validationMessage(err), err.flatten().fieldErrors);
       }
       console.error("[api]", err);
       return fail(500, "Something went wrong on our end.");
     }
   };
+}
+
+/**
+ * Turns a ZodError into a sentence naming what was actually wrong.
+ *
+ * The field errors were already being returned in `details`, but every form in
+ * the app renders `error` alone, so all any of them could say was "Validation
+ * failed" — which names no field, so there is nothing to go and fix. The
+ * details stay in `details` for anything that wants to highlight a specific
+ * input; this just makes the headline useful on its own.
+ */
+function validationMessage(err: ZodError): string {
+  const [first] = err.issues;
+  if (!first) return "Validation failed";
+
+  const where = first.path.join(".");
+  const rest = err.issues.length - 1;
+  const more = rest > 0 ? ` (and ${rest} more)` : "";
+
+  return where ? `${where}: ${first.message}${more}` : `${first.message}${more}`;
 }
 
 /** Parses `?page=&limit=` with sane bounds. */
