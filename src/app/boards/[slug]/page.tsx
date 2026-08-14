@@ -10,6 +10,7 @@ import { DetailBar } from "@/components/TopBar";
 import { PostCard } from "@/components/PostCard";
 import { BoardIcon } from "@/components/BoardIcon";
 import { FeedFilters } from "@/components/FeedFilters";
+import { EmptyState } from "@/components/EmptyState";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -157,19 +158,14 @@ async function BoardFeed({
   );
 
   if (posts.length === 0) {
+    // Distinct from an empty tab: something is probably filtered out rather
+    // than missing, so the first thing to suggest is widening the filter.
     return (
-      <div className="rounded-xl border border-dashed border-hairline bg-surface p-10 text-center">
-        <p className="font-semibold text-ink">No posts match these filters</p>
-        <p className="mt-1 text-sm text-ink-muted">
-          Try clearing a filter, or start the discussion yourself.
-        </p>
-        <Link
-          href="/create"
-          className="mt-4 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
-        >
-          Create Post
-        </Link>
-      </div>
+      <EmptyState
+        title="No posts match these filters"
+        body="Try clearing a filter, or start the discussion yourself."
+        action={{ href: "/create", label: "Create Post" }}
+      />
     );
   }
 

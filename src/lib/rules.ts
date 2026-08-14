@@ -351,6 +351,50 @@ export const POST_TYPE_LABEL: Record<PostType, string> = {
 };
 
 /**
+ * What an empty tab says.
+ *
+ * An empty screen reads as broken unless it says otherwise, so each of these
+ * names what belongs there rather than reporting that nothing does. "Be the
+ * first to post" tells someone they are early; it does not tell them what to
+ * write, and a tab they cannot think of a post for is a tab they leave.
+ */
+export const POST_TYPE_EMPTY: Record<PostType, { title: string; body: string }> =
+  {
+    DISCUSSION: {
+      title: "No discussion yet",
+      body: "Ask what you actually want to know — how the timing felt, what is worth revising, whether the pattern has shifted.",
+    },
+    POLL: {
+      title: "No polls yet",
+      body: "A poll is the quickest way to read the room: which section ran long, how people are planning their attempt.",
+    },
+    MEMORY_QUESTION: {
+      title: "No memory questions yet",
+      body: "Sat this paper? Post what you remember. Even a roughly worded question helps whoever sits a later shift — just mark how well you recall it.",
+    },
+    EXPECTED_CUTOFF: {
+      title: "No cutoff estimates yet",
+      body: "Post your attempts and category to start one off. Estimates sharpen as more shifts finish, so an early one is still worth having.",
+    },
+    OFFICIAL_UPDATE: {
+      title: "No official updates yet",
+      body: "Exam dates, answer keys and notices from the board appear here as they are announced.",
+    },
+    OBJECTION_QUESTION: {
+      title: "No objections raised yet",
+      body: "If a published answer looks wrong, post the question and make your case. Others who sat the same paper can weigh in before you pay the fee.",
+    },
+  };
+
+/**
+ * A tab can carry more than one type — Discussion also holds Expected Cutoff —
+ * and the first is the one that defines it, so it supplies the invitation.
+ */
+export function emptyStateFor(types: PostType[]): { title: string; body: string } {
+  return POST_TYPE_EMPTY[types[0] ?? "DISCUSSION"];
+}
+
+/**
  * Types that are posted as a question with four lettered choices rather than a
  * title and a body: Objection Questions (challenging a published key) and
  * Memory Questions (reconstructing a paper).

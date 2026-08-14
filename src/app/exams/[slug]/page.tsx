@@ -16,7 +16,9 @@ import {
   pickDefaultSession,
 } from "@/lib/queries";
 import { examDate } from "@/lib/format";
-import { isShiftScoped } from "@/lib/rules";
+import { canPostType, emptyStateFor, isShiftScoped } from "@/lib/rules";
+import { isModerator } from "@/lib/admin";
+import { EmptyState } from "@/components/EmptyState";
 import { LifecycleStepper } from "@/components/LifecycleStepper";
 import { PostCard } from "@/components/PostCard";
 import { ExamTabs, type TabKey } from "@/components/ExamTabs";
@@ -191,6 +193,7 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
                 types={TAB_TYPES[tab]}
                 sessionId={activeSession?.id}
                 tab={tab}
+                isStaff={isModerator(user)}
               />
             </Suspense>
           )}
@@ -206,12 +209,14 @@ async function PostsTab({
   types,
   sessionId,
   tab,
+  isStaff,
 }: {
   examSlug: string;
   phaseId: string;
   types: PostType[];
   sessionId?: string;
   tab: TabKey;
+  isStaff: boolean;
 }) {
   // A tab can cover several post types, so query each and merge by recency.
   //
@@ -239,19 +244,14 @@ async function PostsTab({
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   if (posts.length === 0) {
+    // Official Updates are staff-only, so an ordinary reader on that tab gets
+    // the explanation without a button that would only refuse them.
+    const canCreate = canPostType(types[0], isStaff);
     return (
-      <div className="rounded-xl border border-dashed border-hairline bg-surface p-8 text-center">
-        <p className="font-semibold text-ink">Nothing here yet</p>
-        <p className="mt-1 text-sm text-ink-muted">
-          Be the first to post in this tab.
-        </p>
-        <Link
-          href="/create"
-          className="mt-4 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
-        >
-          Create Post
-        </Link>
-      </div>
+      <EmptyState
+        {...emptyStateFor(types)}
+        action={canCreate ? { href: "/create", label: "Create Post" } : undefined}
+      />
     );
   }
 

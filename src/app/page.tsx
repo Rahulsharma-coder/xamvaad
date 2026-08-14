@@ -97,7 +97,8 @@ async function ActiveExams() {
     return (
       <EmptyState
         title="No exams yet"
-        body="Run `npm run db:seed` to load the demo boards and exams."
+        body="Nothing is running right now. Search for an exam to find its past papers and discussion."
+        action={{ href: "/search", label: "Search Exams" }}
       />
     );
   }
