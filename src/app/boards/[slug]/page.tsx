@@ -94,19 +94,34 @@ export default async function BoardFeedPage({ params, searchParams }: Props) {
           </div>
         </section>
 
+        {/* Wraps rather than scrolling sideways. Every other strip in the app
+            holds a fixed handful — five tabs, five lifecycle stages — so
+            running off the edge costs nothing there. A board's exam list has
+            no upper bound and is the main way into the board, and once
+            Rajasthan Exams held six of them the ones past the fold could not
+            be reached at all: the scrollbar is hidden, so on a desktop there
+            was nothing to drag and no sign anything had been cut off. */}
         {board.exams.length > 0 && (
-          <ul className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4">
-            {board.exams.map((exam) => (
-              <li key={exam.id} className="shrink-0">
-                <Link
-                  href={`/exams/${exam.slug}`}
-                  className="inline-block rounded-lg border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-brand-300"
-                >
-                  {exam.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <section className="mt-4" aria-labelledby="board-exams">
+            <h2
+              id="board-exams"
+              className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted"
+            >
+              Exams · {board.exams.length}
+            </h2>
+            <ul className="flex flex-wrap gap-2">
+              {board.exams.map((exam) => (
+                <li key={exam.id}>
+                  <Link
+                    href={`/exams/${exam.slug}`}
+                    className="inline-block rounded-lg border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-brand-300 hover:bg-brand-50/40"
+                  >
+                    {exam.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         <div className="mt-4">
