@@ -74,6 +74,27 @@ export async function examAudience(examId: string): Promise<string[]> {
   return [...ids];
 }
 
+/**
+ * Everyone with an account, minus the author and anyone banned.
+ *
+ * The one audience that deliberately ignores the interest signal above. An
+ * Official Update is a board speaking — a date moving, a key going up — and
+ * that is news to someone who has not posted about the exam yet, often
+ * precisely because they have not. Staff publish few of them and each one is a
+ * deliberate act, so the volume argument that shapes the rest of this file does
+ * not apply the way it does to automatic lifecycle alerts.
+ */
+export async function allUsers(exceptUserId?: string): Promise<string[]> {
+  const users = await db.user.findMany({
+    where: {
+      isBanned: false,
+      ...(exceptUserId ? { id: { not: exceptUserId } } : {}),
+    },
+    select: { id: true },
+  });
+  return users.map((u) => u.id);
+}
+
 /** Inserts one notification per recipient, in batches. */
 export async function notifyMany(
   userIds: string[],

@@ -3,16 +3,15 @@ import { ApiError, handler, ok } from "@/lib/api";
 import { assertBoardAllowed, requireAdminApi } from "@/lib/admin";
 import { audit } from "@/lib/audit";
 import { officialUpdateSchema } from "@/lib/adminValidation";
-import { examAudience, notifyMany } from "@/lib/announce";
+import { allUsers, notifyMany } from "@/lib/announce";
 import { autoTagsFor, normaliseTag } from "@/lib/rules";
 
 /**
  * POST /api/admin/updates — publish an Official Update.
  *
  * One action, three effects: the post is created under the staff account, the
- * automatic tags are attached, and everyone active in that exam is notified.
- * Doing these separately is how an announcement ends up published but never
- * delivered.
+ * automatic tags are attached, and every account is notified. Doing these
+ * separately is how an announcement ends up published but never delivered.
  */
 export const POST = handler(async (req: Request) => {
   const scope = await requireAdminApi();
@@ -72,7 +71,7 @@ export const POST = handler(async (req: Request) => {
 
   let notified = 0;
   if (input.notify !== false) {
-    const audience = await examAudience(exam.id);
+    const audience = await allUsers(scope.user.id);
     notified = await notifyMany(audience, {
       type: "OFFICIAL_UPDATE",
       message: `${exam.name}: ${input.title}`,

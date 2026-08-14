@@ -5,6 +5,7 @@ import { getCurrentUser, isStaff, requireUser } from "@/lib/auth";
 import { getFeed } from "@/lib/queries";
 import { createPostSchema } from "@/lib/validation";
 import { deriveStageStatus } from "@/lib/lifecycle";
+import { allUsers, notifyMany } from "@/lib/announce";
 import {
   MAX_POSTS_PER_HOUR,
   OPTION_LABELS,
@@ -74,7 +75,9 @@ export const POST = handler(async (req: Request) => {
     }),
     db.exam.findUnique({
       where: { id: input.examId },
-      select: { id: true, shortName: true, boardId: true },
+      // name is only needed for the Official Update notification, which reads
+      // "SSC CGL 2026: ..." — shortName alone is too terse out of context.
+      select: { id: true, name: true, shortName: true, boardId: true },
     }),
   ]);
 
@@ -385,6 +388,18 @@ export const POST = handler(async (req: Request) => {
     },
     select: { id: true },
   });
+
+  // An Official Update written here is the same announcement the admin
+  // dashboard publishes, so it reaches the same people. Without this it
+  // reached nobody, and which of the two screens staff happened to use decided
+  // whether anyone heard about it.
+  if (input.type === "OFFICIAL_UPDATE") {
+    await notifyMany(await allUsers(user.id), {
+      type: "OFFICIAL_UPDATE",
+      message: `${exam.name}: ${input.title}`,
+      postId: post.id,
+    });
+  }
 
   return ok({ id: post.id }, 201);
 });

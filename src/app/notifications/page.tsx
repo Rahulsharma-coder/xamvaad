@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { timeAgo } from "@/lib/format";
 import { Avatar } from "@/components/Avatar";
 import { MarkAllRead } from "@/components/MarkAllRead";
+import { NotificationRow } from "@/components/NotificationRow";
 
 export const metadata = { title: "Notifications" };
 
@@ -49,10 +49,16 @@ export default async function NotificationsPage() {
           </div>
         ) : (
           <ul className="divide-y divide-hairline overflow-hidden rounded-xl border border-hairline bg-surface">
-            {notifications.map((notification) => {
-              const content = (
-                <div
-                  className={clsxRow(notification.isRead)}
+            {notifications.map((notification) => (
+              <li key={notification.id}>
+                <NotificationRow
+                  id={notification.id}
+                  isRead={notification.isRead}
+                  href={
+                    notification.postId
+                      ? `/posts/${notification.postId}`
+                      : null
+                  }
                 >
                   {notification.actor ? (
                     <Avatar
@@ -74,36 +80,12 @@ export default async function NotificationsPage() {
                       {timeAgo(notification.createdAt)}
                     </p>
                   </div>
-
-                  {!notification.isRead && (
-                    <span
-                      aria-label="Unread"
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-600"
-                    />
-                  )}
-                </div>
-              );
-
-              return (
-                <li key={notification.id}>
-                  {notification.postId ? (
-                    <Link href={`/posts/${notification.postId}`}>{content}</Link>
-                  ) : (
-                    content
-                  )}
-                </li>
-              );
-            })}
+                </NotificationRow>
+              </li>
+            ))}
           </ul>
         )}
       </main>
     </div>
   );
-}
-
-function clsxRow(isRead: boolean) {
-  return [
-    "flex items-start gap-3 px-4 py-3.5 transition hover:bg-canvas",
-    isRead ? "" : "bg-brand-50/40",
-  ].join(" ");
 }
