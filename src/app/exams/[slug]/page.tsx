@@ -13,7 +13,6 @@ import {
   getExamBySlug,
   getFeed,
   getTrackedQuestions,
-  pickDefaultSession,
 } from "@/lib/queries";
 import { examDate } from "@/lib/format";
 import { canPostType, emptyStateFor, isShiftScoped } from "@/lib/rules";
@@ -85,9 +84,9 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
   // held" under a stepper showing the exam done contradicted the page.
   const conducted = activePhase.stages.find((s) => s.stage === "CONDUCTED");
   const held = conducted ? deriveStageStatus(conducted) !== "PENDING" : false;
-  const activeSession =
-    phaseSessions.find((s) => s.id === sessionId) ??
-    pickDefaultSession(phaseSessions);
+  // No shift chosen means all of them: the page opens on everything, and a
+  // single sitting is a deliberate narrowing from the dropdown.
+  const activeSession = phaseSessions.find((s) => s.id === sessionId) ?? null;
 
   return (
     <div className="page-shell">
@@ -129,6 +128,7 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
                 }))}
                 activeId={activeSession?.id ?? null}
                 tab={tab}
+                phaseSlug={activePhase.slug}
               />
             )}
           </div>
@@ -375,7 +375,8 @@ async function ObjectionsTab({
         <h2 className="mb-3 text-sm font-bold text-ink">Objections Raised</h2>
         {raised.posts.length === 0 ? (
           <p className="rounded-xl border border-dashed border-hairline bg-surface p-6 text-center text-sm text-ink-muted">
-            No one has raised an objection post for this shift yet.
+            No one has raised an objection post
+            {sessionId ? " for this shift" : ""} yet.
           </p>
         ) : (
           <ul className="space-y-3">

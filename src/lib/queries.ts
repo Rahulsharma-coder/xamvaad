@@ -227,10 +227,6 @@ export async function getExamBySlug(slug: string) {
           id: true,
           date: true,
           shift: true,
-          // Used to pick a sensible default shift — see pickDefaultSession.
-          _count: {
-            select: { posts: { where: VISIBLE_POST }, questions: true },
-          },
         },
         orderBy: [{ date: "desc" }, { shift: "asc" }],
       },
@@ -247,10 +243,6 @@ export async function getExamBySlug(slug: string) {
               id: true,
               date: true,
               shift: true,
-              // Used to pick a sensible default shift — see pickDefaultSession.
-              _count: {
-                select: { posts: { where: VISIBLE_POST }, questions: true },
-              },
             },
             orderBy: [{ date: "desc" }, { shift: "asc" }],
           },
@@ -270,24 +262,6 @@ export async function getExamBySlug(slug: string) {
       },
     },
   });
-}
-
-/**
- * Chooses which shift the exam hub opens on.
- *
- * The newest sitting is usually the wrong answer: a shift that just finished
- * has no answer key, no tracked questions and no discussion, so the hub would
- * open on an empty tab while the active shift sits one dropdown away. Rank by
- * actual activity instead, falling back to the newest when nothing has any.
- */
-export function pickDefaultSession<
-  T extends { _count: { posts: number; questions: number } },
->(sessions: T[]): T | null {
-  if (sessions.length === 0) return null;
-
-  const activity = (s: T) => s._count.posts + s._count.questions;
-  // Sessions arrive newest-first, so a strict `>` keeps the newest on a tie.
-  return sessions.reduce((best, s) => (activity(s) > activity(best) ? s : best));
 }
 
 /** Exams for the home screen, ordered by how much discussion they're drawing. */
