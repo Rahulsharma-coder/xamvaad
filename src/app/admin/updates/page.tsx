@@ -5,6 +5,7 @@ import { requireAdminPage } from "@/lib/admin";
 import { timeAgo } from "@/lib/format";
 import { Badge, Card, EmptyRow, PageHeader } from "@/components/admin/ui";
 import { PublishUpdateForm } from "@/components/admin/PublishUpdateForm";
+import { FeedAlert } from "@/components/admin/FeedAlert";
 
 export const metadata = { title: "Official Updates" };
 export const dynamic = "force-dynamic";
@@ -84,6 +85,8 @@ export default async function AdminUpdatesPage({ searchParams }: Props) {
         subtitle="Pinned announcements, delivered to everyone active in the exam."
       />
 
+      <FeedAlert />
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Card>
           <PublishUpdateForm
@@ -122,7 +125,7 @@ export default async function AdminUpdatesPage({ searchParams }: Props) {
       <section className="mt-6">
         <h2 className="text-sm font-bold text-ink">Sarkari Result feed</h2>
         <p className="mb-3 mt-0.5 text-xs text-ink-muted">
-          Checked every four hours. Entries about our exams are posted in Hindi
+          Checked every hour. Entries about our exams are posted in Hindi
           with the board&apos;s own link; the ones skipped here may need a
           manual update. Matching uses each exam&apos;s keywords, set on its
           Exam Operations page.

@@ -6,6 +6,7 @@ import { deriveStageStatus } from "@/lib/lifecycle";
 import { timeAgo } from "@/lib/format";
 import { Card, EmptyRow, PageHeader, Stat } from "@/components/admin/ui";
 import { ExamOpsCard } from "@/components/admin/ExamOpsCard";
+import { FeedAlert } from "@/components/admin/FeedAlert";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -90,6 +91,8 @@ export default async function AdminDashboard() {
         title="Dashboard"
         subtitle="What needs a decision today."
       />
+
+      <FeedAlert />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat

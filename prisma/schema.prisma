@@ -149,6 +149,15 @@ enum FeedItemStatus {
   FAILED
 }
 
+/// How one run of the official-feed job ended. Anything but OK raises an alert
+/// on the admin dashboard until a later run succeeds.
+enum FeedRunStatus {
+  OK
+  BLOCKED /// Sarkari Result refused us: 401/403/429, or a bot check instead of the feed
+  UNREACHABLE /// the site was down, timed out, or answered 5xx
+  FAILED /// anything else, including our own errors
+}
+
 enum ReportReason {
   SPAM
   DUPLICATE
@@ -815,6 +824,22 @@ model FeedItem {
   createdAt   DateTime       @default(now())
 
   exam Exam? @relation(fields: [examId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+
+/// One run of the official-feed job, kept for the dashboard alert. Dry runs
+/// are not recorded; rows older than 30 days are pruned by the job itself.
+model FeedRun {
+  id         String        @id @default(cuid())
+  status     FeedRunStatus
+  /// What went wrong, in words an admin can act on.
+  error      String?
+  /// The HTTP status Sarkari Result answered with, when it answered at all.
+  httpStatus Int?
+  published  Int           @default(0)
+  createdAt  DateTime      @default(now())
 
   @@index([createdAt])
 }

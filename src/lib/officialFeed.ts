@@ -1,5 +1,5 @@
 import { Prisma } from "@/prisma/client";
-import type { FeedItemStatus } from "@/prisma/client";
+import type { FeedItemStatus, FeedRunStatus } from "@/prisma/client";
 import { db } from "./db";
 import { audit } from "./audit";
 import { publishOfficialUpdate } from "./officialUpdates";
@@ -14,8 +14,9 @@ import { publishOfficialUpdate } from "./officialUpdates";
  * on their own domain are never copied — if no government link can be found,
  * nothing is published.
  *
- * The job runs every few hours, so the feed is read a handful of times a day
- * and an entry's page is fetched only once it has matched one of our exams.
+ * The job runs hourly, which is how often the feed itself updates, and an
+ * entry's page is fetched only once it has matched one of our exams — a
+ * couple of times a day.
  */
 
 export const FEED_URL = "https://www.sarkariresult.com/feed_rss.xml";
@@ -344,14 +345,60 @@ export function composePost(exam: FeedExam, kind: UpdateKind, feedTitle: string)
 // The job
 // ---------------------------------------------------------------------------
 
-async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: { "user-agent": USER_AGENT, accept: "text/html,application/xml" },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`${url} answered ${res.status}`);
-  return res.text();
+/** A fetch from Sarkari Result that failed, sorted by what an admin can do. */
+export class FeedFetchError extends Error {
+  constructor(
+    public status: Exclude<FeedRunStatus, "OK">,
+    message: string,
+    public httpStatus: number | null = null
+  ) {
+    super(message);
+    this.name = "FeedFetchError";
+  }
+}
+
+async function fetchText(url: string, { expectFeed = false } = {}): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { "user-agent": USER_AGENT, accept: "text/html,application/xml" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === "TimeoutError";
+    throw new FeedFetchError(
+      "UNREACHABLE",
+      timedOut
+        ? `Sarkari Result did not answer within ${FETCH_TIMEOUT_MS / 1000} seconds.`
+        : `Could not reach Sarkari Result: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  if (res.status === 401 || res.status === 403 || res.status === 429) {
+    throw new FeedFetchError(
+      "BLOCKED",
+      `Sarkari Result refused the request (HTTP ${res.status}${res.status === 429 ? ", too many requests" : ""}).`,
+      res.status
+    );
+  }
+  if (res.status >= 500) {
+    throw new FeedFetchError("UNREACHABLE", `Sarkari Result is down (HTTP ${res.status}).`, res.status);
+  }
+  if (!res.ok) {
+    throw new FeedFetchError("FAILED", `Sarkari Result answered HTTP ${res.status} for ${url}.`, res.status);
+  }
+
+  const text = await res.text();
+  // A bot check answers 200 with an HTML page, so a block can look like success.
+  if (expectFeed && !/<rss[\s>]/i.test(text)) {
+    throw new FeedFetchError(
+      "BLOCKED",
+      "Sarkari Result sent a web page instead of the feed, which is usually a bot check.",
+      res.status
+    );
+  }
+  return text;
 }
 
 /** The account the updates are published under. */
@@ -420,6 +467,59 @@ async function evaluate(
   };
 }
 
+export type FeedRunResult = {
+  status: FeedRunStatus;
+  error: string | null;
+  httpStatus: number | null;
+  results: FeedReport[];
+};
+
+/** How long run history is kept; the alert only ever reads the last day. */
+const RUN_HISTORY_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Runs the job and records how it went, so the admin dashboard can say when
+ * the feed was last fetched and why it failed. A block on an entry's page is
+ * reported as a block of the run: it is the same site refusing the same bot.
+ */
+export async function runOfficialFeed({ dryRun = false } = {}): Promise<FeedRunResult> {
+  let run: FeedRunResult;
+
+  try {
+    const { reports, blocked } = await processFeed(dryRun);
+    run = blocked
+      ? { status: "BLOCKED", error: blocked.message, httpStatus: blocked.httpStatus, results: reports }
+      : { status: "OK", error: null, httpStatus: null, results: reports };
+  } catch (err) {
+    console.error("[official-feed]", err);
+    run =
+      err instanceof FeedFetchError
+        ? { status: err.status, error: err.message, httpStatus: err.httpStatus, results: [] }
+        : {
+            status: "FAILED",
+            error: err instanceof Error ? err.message : String(err),
+            httpStatus: null,
+            results: [],
+          };
+  }
+
+  if (!dryRun) {
+    await db.feedRun.create({
+      data: {
+        status: run.status,
+        error: run.error,
+        httpStatus: run.httpStatus,
+        published: run.results.filter((r) => r.status === "PUBLISHED").length,
+      },
+    });
+    await db.feedRun.deleteMany({
+      where: { createdAt: { lt: new Date(Date.now() - RUN_HISTORY_MS) } },
+    });
+  }
+
+  return run;
+}
+
 /**
  * Reads the feed and announces every new entry about one of our exams.
  *
@@ -431,8 +531,17 @@ async function evaluate(
  * With `dryRun`, nothing is written and entries already handled are evaluated
  * again, so the matching can be checked against the live feed.
  */
-export async function runOfficialFeed({ dryRun = false } = {}): Promise<FeedReport[]> {
-  const entries = parseFeed(await fetchText(FEED_URL));
+async function processFeed(
+  dryRun: boolean
+): Promise<{ reports: FeedReport[]; blocked: FeedFetchError | null }> {
+  const entries = parseFeed(await fetchText(FEED_URL, { expectFeed: true }));
+  if (entries.length === 0) {
+    throw new FeedFetchError("FAILED", "The feed had no entries; its format may have changed.");
+  }
+  let blocked: FeedFetchError | null = null;
+  const noteBlock = (err: unknown) => {
+    if (err instanceof FeedFetchError && err.status === "BLOCKED") blocked ??= err;
+  };
 
   const exams: FeedExam[] = await db.exam.findMany({
     where: { archivedAt: null, NOT: { feedKeywords: { isEmpty: true } } },
@@ -485,6 +594,7 @@ export async function runOfficialFeed({ dryRun = false } = {}): Promise<FeedRepo
           error: outcome.error,
         });
       } catch (err) {
+        noteBlock(err);
         reports.push({ title: entry.title, status: "FAILED", error: String(err) });
       }
       continue;
@@ -535,12 +645,13 @@ export async function runOfficialFeed({ dryRun = false } = {}): Promise<FeedRepo
       });
     } catch (err) {
       console.error("[official-feed]", entry.title, err);
+      noteBlock(err);
       await db.feedItem.update({ where: { key }, data: { status: "FAILED" } });
       reports.push({ title: entry.title, status: "FAILED", error: String(err) });
     }
   }
 
-  return reports;
+  return { reports, blocked };
 }
 
 /**

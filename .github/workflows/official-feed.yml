@@ -1,8 +1,10 @@
 # Announces new Sarkari Result entries about our exams as Official Updates.
 #
-# Every four hours: often enough that an admit card is on Xamvaad the same
-# morning, rarely enough that the feed is read six times a day. Vercel Cron on
-# the Hobby plan runs at most daily, which is why this lives here.
+# Hourly, which is how often the feed itself updates: an admit card is on
+# Xamvaad within the hour, and one small RSS request an hour is ordinary feed
+# reader traffic. Vercel Cron on the Hobby plan runs at most daily, which is
+# why this lives here. A failed run shows red here and raises an alert on the
+# admin dashboard.
 #
 # Needs two repository secrets:
 #   CRON_SECRET  - the same value as the CRON_SECRET env var on Vercel
@@ -12,7 +14,7 @@ name: Official feed
 
 on:
   schedule:
-    - cron: "17 */4 * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:

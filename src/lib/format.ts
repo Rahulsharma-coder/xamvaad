@@ -38,6 +38,20 @@ export function examDate(date: Date | string): string {
   });
 }
 
+/** "15 Oct 2026, 3:17 pm" in Indian time — for when something happened. */
+export function dateTime(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  });
+}
+
 /** "25 Jul" — the terser form used inside the lifecycle stepper. */
 export function shortDate(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
