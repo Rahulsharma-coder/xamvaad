@@ -4,6 +4,9 @@ import { db } from "./db";
 import { audit } from "./audit";
 import { publishOfficialUpdate } from "./officialUpdates";
 import { STAGE_LABEL, STAGE_ORDER } from "./lifecycle";
+import { istDay } from "./stageOps";
+import type { SessionUser } from "./auth";
+import { type Button, esc, notifyAdmins, siteUrl } from "./telegram";
 
 /**
  * Official Updates from the Sarkari Result feed.
@@ -329,12 +332,6 @@ export function resolvePhase(title: string, phases: FeedPhase[]): FeedPhase | nu
   return named.length === 1 ? named[0]! : null;
 }
 
-/** The IST calendar day of an instant, stored the way admins' dates are. */
-function istDay(at: Date): Date {
-  const day = at.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  return new Date(`${day}T00:00:00.000Z`);
-}
-
 /**
  * Marks a stage as having happened on the day of the update.
  *
@@ -380,6 +377,70 @@ export async function markStageFromFeed(
     phaseName: phase.name,
     note: `Marked ${label} on ${phase.name} for ${day.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}.`,
   };
+}
+
+/**
+ * Finishes a published update whose phase the job couldn't tell, once an
+ * admin has said which phase it was — from the admin panel or Telegram.
+ */
+export async function resolveFeedItemStage(input: {
+  itemId: string;
+  phaseId: string;
+  actor: SessionUser;
+  /** Board scope check, for a board moderator in the admin panel. */
+  allowBoard?: (boardId: string) => boolean;
+}): Promise<{ note: string }> {
+  const item = await db.feedItem.findUnique({
+    where: { id: input.itemId },
+    select: {
+      title: true,
+      stage: true,
+      publishedAt: true,
+      createdAt: true,
+      exam: { select: { id: true, name: true, boardId: true } },
+    },
+  });
+  if (!item?.stage || !item.exam) {
+    throw new FeedStageError(404, "That feed update has no stage to mark.");
+  }
+  if (input.allowBoard && !input.allowBoard(item.exam.boardId)) {
+    throw new FeedStageError(403, "That exam is outside the boards you moderate.");
+  }
+
+  const phase = await db.examPhase.findFirst({
+    where: { id: input.phaseId, examId: item.exam.id },
+    select: { id: true },
+  });
+  if (!phase) throw new FeedStageError(400, "That phase doesn't belong to this exam.");
+
+  const result = await markStageFromFeed(phase.id, item.stage, item.publishedAt ?? item.createdAt);
+
+  await db.feedItem.update({
+    where: { id: input.itemId },
+    data: { stagePhaseId: phase.id, stageNote: result.note },
+  });
+
+  await audit({
+    actor: input.actor,
+    action: "exam.stage.update",
+    targetType: "Exam",
+    targetId: item.exam.id,
+    summary: result.marked
+      ? `Marked ${STAGE_LABEL[item.stage]} for ${item.exam.name} ${result.phaseName} from the feed update "${item.title}"`
+      : `Left ${STAGE_LABEL[item.stage]} for ${item.exam.name} ${result.phaseName} as already set`,
+  });
+
+  return { note: result.note };
+}
+
+export class FeedStageError extends Error {
+  constructor(
+    public status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = "FeedStageError";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -624,6 +685,10 @@ export async function runOfficialFeed({ dryRun = false } = {}): Promise<FeedRunR
   }
 
   if (!dryRun) {
+    const previous = await db.feedRun.findFirst({
+      orderBy: { createdAt: "desc" },
+      select: { status: true, createdAt: true },
+    });
     await db.feedRun.create({
       data: {
         status: run.status,
@@ -635,6 +700,20 @@ export async function runOfficialFeed({ dryRun = false } = {}): Promise<FeedRunR
     await db.feedRun.deleteMany({
       where: { createdAt: { lt: new Date(Date.now() - RUN_HISTORY_MS) } },
     });
+
+    // On the change only: an alert every hour of a long block is noise.
+    const wasOk = !previous || previous.status === "OK";
+    if (wasOk && run.status !== "OK") {
+      await notifyAdmins(
+        `🔴 <b>${run.status === "BLOCKED" ? "Sarkari Result ne feed block kar di" : run.status === "UNREACHABLE" ? "Sarkari Result tak pahunch nahi paaye" : "Official feed fail ho gayi"}</b>
+` +
+          `${esc(run.error ?? "")}
+
+Jab tak theek na ho, zaroori updates admin panel se daalo. Theek hote hi bata dunga.`
+      );
+    } else if (!wasOk && run.status === "OK") {
+      await notifyAdmins("✅ <b>Official feed phir se chal rahi hai.</b>");
+    }
   }
 
   return run;
@@ -777,7 +856,7 @@ async function processFeed(
         }
       }
 
-      await db.feedItem.update({
+      const item = await db.feedItem.update({
         where: { key },
         data: {
           status: outcome.status,
@@ -788,7 +867,26 @@ async function processFeed(
           stagePhaseId,
           stageNote,
         },
+        select: { id: true },
       });
+
+      if (postId && outcome.draft && outcome.exam) {
+        const unclear = outcome.stage && !stagePhaseId && outcome.exam.phases.length > 0;
+        const rows: Button[][] = unclear
+          ? [outcome.exam.phases.map((p) => ({ text: p.name, data: `fs:${item.id}:${p.id}` }))]
+          : [];
+        rows.push([{ text: "Post dekho", url: `${siteUrl()}/posts/${postId}` }]);
+        await notifyAdmins(
+          `📢 <b>Nayi Official Update publish hui</b>
+${esc(outcome.draft.title)}
+
+` +
+            `Feed: <i>${esc(entry.title)}</i>` +
+            (stageNote ? `
+${esc(stageNote)}` : ""),
+          rows
+        );
+      }
 
       reports.push({
         title: entry.title,
