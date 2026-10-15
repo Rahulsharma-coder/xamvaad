@@ -6,6 +6,8 @@ import { timeAgo } from "@/lib/format";
 import { Badge, Card, EmptyRow, PageHeader } from "@/components/admin/ui";
 import { PublishUpdateForm } from "@/components/admin/PublishUpdateForm";
 import { FeedAlert } from "@/components/admin/FeedAlert";
+import { FeedStageButtons } from "@/components/admin/FeedStageButtons";
+import { STAGE_LABEL } from "@/lib/lifecycle";
 
 export const metadata = { title: "Official Updates" };
 export const dynamic = "force-dynamic";
@@ -68,8 +70,19 @@ export default async function AdminUpdatesPage({ searchParams }: Props) {
         sourceUrl: true,
         officialUrl: true,
         postId: true,
+        stage: true,
+        stagePhaseId: true,
+        stageNote: true,
         createdAt: true,
-        exam: { select: { name: true } },
+        exam: {
+          select: {
+            name: true,
+            phases: {
+              select: { id: true, name: true },
+              orderBy: { sequence: "asc" },
+            },
+          },
+        },
       },
     }),
   ]);
@@ -126,8 +139,9 @@ export default async function AdminUpdatesPage({ searchParams }: Props) {
         <h2 className="text-sm font-bold text-ink">Sarkari Result feed</h2>
         <p className="mb-3 mt-0.5 text-xs text-ink-muted">
           Checked every hour. Entries about our exams are posted in Hindi
-          with the board&apos;s own link; the ones skipped here may need a
-          manual update. Matching uses each exam&apos;s keywords, set on its
+          with the board&apos;s own link, and an answer key, final key or
+          result also marks that stage on the exam&apos;s lifecycle. The ones
+          skipped here may need a manual update. Matching uses each exam&apos;s keywords, set on its
           Exam Operations page.
         </p>
         {feedItems.length === 0 ? (
@@ -180,6 +194,18 @@ export default async function AdminUpdatesPage({ searchParams }: Props) {
                       </Link>
                     )}
                   </p>
+                  {item.stageNote && (
+                    <p className="mt-1.5 text-[11px] text-ink-muted">
+                      {item.stageNote}
+                    </p>
+                  )}
+                  {item.stage && !item.stagePhaseId && item.exam && (
+                    <FeedStageButtons
+                      itemId={item.id}
+                      stageLabel={STAGE_LABEL[item.stage]}
+                      phases={item.exam.phases}
+                    />
+                  )}
                 </li>
               );
             })}

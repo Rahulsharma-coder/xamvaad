@@ -821,6 +821,13 @@ model FeedItem {
   examId      String?
   postId      String?
   officialUrl String?
+
+  /// The lifecycle stage this update marks (answer key, final key, result),
+  /// and the phase it was marked on. A stage with no phase is waiting for an
+  /// admin to say which tier the update was about.
+  stage        ExamStage?
+  stagePhaseId String?
+  stageNote    String?
   createdAt   DateTime       @default(now())
 
   exam Exam? @relation(fields: [examId], references: [id], onDelete: SetNull)

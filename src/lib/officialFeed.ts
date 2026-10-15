@@ -1,8 +1,9 @@
 import { Prisma } from "@/prisma/client";
-import type { FeedItemStatus, FeedRunStatus } from "@/prisma/client";
+import type { ExamStage, FeedItemStatus, FeedRunStatus } from "@/prisma/client";
 import { db } from "./db";
 import { audit } from "./audit";
 import { publishOfficialUpdate } from "./officialUpdates";
+import { STAGE_LABEL, STAGE_ORDER } from "./lifecycle";
 
 /**
  * Official Updates from the Sarkari Result feed.
@@ -34,6 +35,8 @@ type UpdateKind = {
   link: RegExp;
   headline: (feedTitle: string) => string;
   sentence: (exam: string) => string;
+  /** The lifecycle stage this kind of update completes, if any. */
+  stage?: ExamStage;
 };
 
 const RESULT: UpdateKind = {
@@ -43,14 +46,25 @@ const RESULT: UpdateKind = {
   headline: (t) => (/\bfinal result\b/.test(t) ? "अंतिम परिणाम जारी" : "परिणाम जारी"),
   sentence: (exam) =>
     `${exam} का परिणाम जारी कर दिया गया है। अपना परिणाम आधिकारिक वेबसाइट पर देखें।`,
+  stage: "RESULT",
 };
 
 /**
- * Ordered: the first match wins. Answer keys come before results because a
- * title can name both, and corrections before "online form" because a
- * correction window is announced as "Online Form Correction".
+ * Ordered: the first match wins. A final key comes before the answer key it
+ * also names, answer keys before results because a title can name both, and
+ * corrections before "online form" because a correction window is announced
+ * as "Online Form Correction".
  */
 const KINDS: UpdateKind[] = [
+  {
+    id: "FINAL_KEY",
+    title: /\bfinal (answer )?key\b/,
+    link: /final|answer key/i,
+    headline: () => "फाइनल आंसर की जारी",
+    sentence: (exam) =>
+      `${exam} की फाइनल आंसर की जारी कर दी गई है। आपत्तियों के बाद तय हुए अंतिम उत्तर आधिकारिक वेबसाइट पर देखें।`,
+    stage: "FINAL_KEY",
+  },
   {
     id: "ANSWER_KEY",
     title: /\banswer key\b/,
@@ -58,6 +72,7 @@ const KINDS: UpdateKind[] = [
     headline: () => "आंसर की जारी",
     sentence: (exam) =>
       `${exam} की आंसर की जारी कर दी गई है। अपने उत्तर मिलाएँ और किसी उत्तर पर आपत्ति हो तो तय समय-सीमा में दर्ज करें।`,
+    stage: "ANSWER_KEY_RELEASED",
   },
   RESULT,
   {
@@ -213,7 +228,10 @@ export type FeedExam = {
   boardId: string;
   feedKeywords: string[];
   board: { name: string };
+  phases: FeedPhase[];
 };
+
+type FeedPhase = { id: string; name: string; shortName: string };
 
 type ExamMatch =
   | { kind: "match"; exam: FeedExam }
@@ -269,6 +287,99 @@ export function matchExam(title: string, exams: FeedExam[]): ExamMatch {
 export function sameCycle(title: string, year: number): boolean {
   const years = title.match(/\b20\d{2}\b/g);
   return !years || years.includes(String(year));
+}
+
+// ---------------------------------------------------------------------------
+// The lifecycle stage
+// ---------------------------------------------------------------------------
+
+/** Words in nearly every feed title, so useless for telling tiers apart. */
+const GENERIC_PHASE_WORDS = new Set(["exam", "test", "paper", "phase", "written"]);
+
+const ROMAN: Record<string, string> = { "1": "i", "2": "ii", "3": "iii", "4": "iv" };
+const ARABIC: Record<string, string> = { i: "1", ii: "2", iii: "3", iv: "4" };
+
+/** "Tier 1" also as "Tier I", "Prelims" also as "Pre", and so on. */
+function phaseAliases(phase: FeedPhase): string[] {
+  const aliases = new Set<string>();
+  for (const raw of [phase.name, phase.shortName]) {
+    const words = normalise(raw);
+    // "T" or "P" alone would match half the titles in the feed.
+    if (words.length < 2 || GENERIC_PHASE_WORDS.has(words)) continue;
+    aliases.add(words);
+    aliases.add(words.replace(/\b([1-4])\b/g, (d) => ROMAN[d]!));
+    aliases.add(words.replace(/\b(i{1,3}|iv)\b/g, (r) => ARABIC[r]!));
+    if (/\bprelim/.test(words)) ["pre", "prelims", "preliminary"].forEach((a) => aliases.add(a));
+    if (/\bmains?\b/.test(words)) ["main", "mains"].forEach((a) => aliases.add(a));
+  }
+  return [...aliases];
+}
+
+/**
+ * Which tier a feed title is about: the one it names, or the only one the
+ * exam has. Null when that can't be told — "CGL Result" for an exam with
+ * three tiers is left for an admin rather than guessed.
+ */
+export function resolvePhase(title: string, phases: FeedPhase[]): FeedPhase | null {
+  if (phases.length === 1) return phases[0]!;
+  const haystack = ` ${normalise(title)} `;
+  const named = phases.filter((p) =>
+    phaseAliases(p).some((alias) => haystack.includes(` ${alias} `))
+  );
+  return named.length === 1 ? named[0]! : null;
+}
+
+/** The IST calendar day of an instant, stored the way admins' dates are. */
+function istDay(at: Date): Date {
+  const day = at.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return new Date(`${day}T00:00:00.000Z`);
+}
+
+/**
+ * Marks a stage as having happened on the day of the update.
+ *
+ * An admin's own entry wins: a stage they dated in the past or pinned with an
+ * override is left alone. A date still in the future was only a forecast, and
+ * the update is proof it has now happened, so that one is replaced.
+ *
+ * The stage's own notification is marked as sent, because the Official Update
+ * already told everyone — otherwise the same news would arrive twice.
+ */
+export async function markStageFromFeed(
+  phaseId: string,
+  stage: ExamStage,
+  at: Date
+): Promise<{ marked: boolean; note: string; phaseName: string }> {
+  const day = istDay(at);
+  const [phase, existing] = await Promise.all([
+    db.examPhase.findUniqueOrThrow({ where: { id: phaseId }, select: { name: true } }),
+    db.examStageEntry.findUnique({
+      where: { phaseId_stage: { phaseId, stage } },
+      select: { startsAt: true, statusOverride: true },
+    }),
+  ]);
+  const label = STAGE_LABEL[stage];
+
+  if (existing?.statusOverride || (existing?.startsAt && existing.startsAt <= day)) {
+    return {
+      marked: false,
+      phaseName: phase.name,
+      note: `${phase.name} already had ${label} set, so it was left as the admin set it.`,
+    };
+  }
+
+  const data = { startsAt: day, startAnnouncedAt: new Date() };
+  await db.examStageEntry.upsert({
+    where: { phaseId_stage: { phaseId, stage } },
+    create: { phaseId, stage, sortOrder: STAGE_ORDER.indexOf(stage) + 1, ...data },
+    update: data,
+  });
+
+  return {
+    marked: true,
+    phaseName: phase.name,
+    note: `Marked ${label} on ${phase.name} for ${day.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}.`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -425,6 +536,8 @@ export type FeedReport = {
   exam?: string;
   officialUrl?: string;
   post?: { id: string; title: string };
+  /** What became of the lifecycle stage this update marks, if any. */
+  stage?: string;
   error?: string;
 };
 
@@ -433,6 +546,8 @@ type Outcome = {
   exam?: FeedExam;
   officialUrl?: string;
   draft?: { title: string; body: string };
+  /** Set when the update completes a stage; `phase` null means unclear. */
+  stage?: { stage: ExamStage; phase: FeedPhase | null };
   error?: string;
 };
 
@@ -464,8 +579,13 @@ async function evaluate(
     exam,
     officialUrl,
     draft: composePost(exam, kind, entry.title),
+    stage: kind.stage
+      ? { stage: kind.stage, phase: resolvePhase(entry.title, exam.phases) }
+      : undefined,
   };
 }
+
+const UNCLEAR_PHASE = "Which phase this is about isn't clear. Choose it below.";
 
 export type FeedRunResult = {
   status: FeedRunStatus;
@@ -553,6 +673,10 @@ async function processFeed(
       boardId: true,
       feedKeywords: true,
       board: { select: { name: true } },
+      phases: {
+        select: { id: true, name: true, shortName: true },
+        orderBy: { sequence: "asc" },
+      },
     },
   });
 
@@ -591,6 +715,11 @@ async function processFeed(
           exam: outcome.exam?.name,
           officialUrl: outcome.officialUrl,
           post: outcome.draft && { id: "(dry run)", title: outcome.draft.title },
+          stage:
+            outcome.stage &&
+            (outcome.stage.phase
+              ? `Would mark ${STAGE_LABEL[outcome.stage.stage]} on ${outcome.stage.phase.name}`
+              : UNCLEAR_PHASE),
           error: outcome.error,
         });
       } catch (err) {
@@ -625,6 +754,29 @@ async function processFeed(
         });
       }
 
+      // After the post, and never able to fail it: the post is already out,
+      // and a FAILED entry would be retried and announced a second time.
+      let stagePhaseId: string | null = null;
+      let stageNote: string | null = null;
+      if (postId && outcome.stage) {
+        if (!outcome.stage.phase) {
+          stageNote = UNCLEAR_PHASE;
+        } else {
+          try {
+            const marked = await markStageFromFeed(
+              outcome.stage.phase.id,
+              outcome.stage.stage,
+              entry.publishedAt ?? new Date()
+            );
+            stagePhaseId = outcome.stage.phase.id;
+            stageNote = marked.note;
+          } catch (err) {
+            console.error("[official-feed] stage", entry.title, err);
+            stageNote = `Could not mark ${STAGE_LABEL[outcome.stage.stage]}. Choose the phase below to try again.`;
+          }
+        }
+      }
+
       await db.feedItem.update({
         where: { key },
         data: {
@@ -632,6 +784,9 @@ async function processFeed(
           examId: outcome.exam?.id ?? null,
           officialUrl: outcome.officialUrl ?? null,
           postId,
+          stage: postId ? (outcome.stage?.stage ?? null) : null,
+          stagePhaseId,
+          stageNote,
         },
       });
 
@@ -641,6 +796,7 @@ async function processFeed(
         exam: outcome.exam?.name,
         officialUrl: outcome.officialUrl,
         post: postId && outcome.draft ? { id: postId, title: outcome.draft.title } : undefined,
+        stage: stageNote ?? undefined,
         error: outcome.error,
       });
     } catch (err) {
