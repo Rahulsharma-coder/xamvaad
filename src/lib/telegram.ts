@@ -66,8 +66,11 @@ export function send(chatId: number, text: string, rows?: Button[][], extra: Rec
 /** Telegram id -> Xamvaad username, from TELEGRAM_ADMINS. */
 export function telegramAdmins(): Map<number, string> {
   const admins = new Map<number, string>();
-  for (const pair of (process.env.TELEGRAM_ADMINS ?? "").split(",")) {
-    const [id, username] = pair.split(":").map((s) => s.trim());
+  // Forgiving about what a dashboard paste brings along: quotes, which Vercel
+  // keeps as part of the value, spaces, newlines, and an "@" on the username.
+  const raw = (process.env.TELEGRAM_ADMINS ?? "").replace(/["'\s@]/g, "");
+  for (const pair of raw.split(/[,;]/)) {
+    const [id, username] = pair.split(":");
     if (id && username && /^\d+$/.test(id)) admins.set(Number(id), username);
   }
   return admins;
