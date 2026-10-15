@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { FeedSkeleton, TrackerSkeleton } from "@/components/Skeletons";
-import { withDerivedStatus } from "@/lib/lifecycle";
+import { deriveStageStatus, withDerivedStatus } from "@/lib/lifecycle";
 import { phaseHasAnswerKey, phaseStatus, pickDefaultPhase } from "@/lib/phases";
 import { PhasePicker } from "@/components/PhasePicker";
 import { runDueAnnouncements } from "@/lib/announce";
@@ -79,6 +79,12 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
       : rawTabKey;
 
   const phaseSessions = activePhase.sessions;
+
+  // No shifts can mean two different things: the tier is still to come, or it
+  // has been sat and nobody has entered its shifts yet. Saying "hasn't been
+  // held" under a stepper showing the exam done contradicted the page.
+  const conducted = activePhase.stages.find((s) => s.stage === "CONDUCTED");
+  const held = conducted ? deriveStageStatus(conducted) !== "PENDING" : false;
   const activeSession =
     phaseSessions.find((s) => s.id === sessionId) ??
     pickDefaultSession(phaseSessions);
@@ -152,8 +158,18 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
 
         {phaseSessions.length === 0 && (
           <p className="mt-4 rounded-xl border border-dashed border-hairline bg-surface p-4 text-center text-sm text-ink-muted">
-            {activePhase.name} hasn&apos;t been held yet. Shifts appear here once
-            the official notification is out.
+            {held ? (
+              <>
+                {activePhase.name} has been held, but its shifts haven&apos;t
+                been added yet. Shift-wise memory questions and objections
+                open once they are.
+              </>
+            ) : (
+              <>
+                {activePhase.name} hasn&apos;t been held yet. Shifts appear here
+                once the official notification is out.
+              </>
+            )}
           </p>
         )}
 
