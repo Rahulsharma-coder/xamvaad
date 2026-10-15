@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
+import { Noto_Sans_Devanagari } from "next/font/google";
 import { ProgressBar } from "@/components/ProgressBar";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
@@ -33,6 +34,20 @@ export const metadata: Metadata = {
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * Hindi text, such as the Official Updates, in a typeface drawn for
+ * Devanagari rather than whatever the device falls back to. It sits behind the
+ * system fonts in globals.css, so Latin text is untouched and only Devanagari
+ * characters reach it — and it is not preloaded, so a page with no Hindi never
+ * downloads it.
+ */
+const devanagari = Noto_Sans_Devanagari({
+  subsets: ["devanagari"],
+  variable: "--font-devanagari",
+  preload: false,
+  adjustFontFallback: false,
+});
+
 export const viewport: Viewport = {
   themeColor: "#4F46E5",
   width: "device-width",
@@ -54,7 +69,7 @@ export default async function RootLayout({
     : 0;
 
   return (
-    <html lang="en">
+    <html lang="en" className={devanagari.variable}>
       <body>
         {/* Its own boundary: useSearchParams needs one, and keeping it a
             sibling of {children} means it never wraps the page — a boundary

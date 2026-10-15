@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ExternalLink } from "lucide-react";
 import { db } from "@/lib/db";
 import { canModifyPost, getCurrentUser, isStaff } from "@/lib/auth";
 import { getPost, getViewerState } from "@/lib/queries";
@@ -131,6 +132,18 @@ export default async function PostDetailPage({ params }: Props) {
             <div className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-ink">
               {post.body}
             </div>
+          )}
+
+          {post.sourceUrl && (
+            <a
+              href={post.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
+            >
+              आधिकारिक लिंक खोलें
+              <ExternalLink size={14} />
+            </a>
           )}
 
           <div className="mt-4 border-t border-hairline pt-3">

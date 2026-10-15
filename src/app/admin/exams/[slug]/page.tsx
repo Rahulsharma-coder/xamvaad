@@ -12,6 +12,7 @@ import { AnswerKeyPanel } from "@/components/admin/AnswerKeyPanel";
 import { ArchiveButton } from "@/components/admin/ArchiveButton";
 import { NewPhaseForm } from "@/components/admin/NewPhaseForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
+import { FeedKeywordsForm } from "@/components/admin/FeedKeywordsForm";
 import { examDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,7 @@ export default async function AdminExamDetail({ params }: Props) {
       year: true,
       boardId: true,
       archivedAt: true,
+      feedKeywords: true,
       board: { select: { name: true } },
       phases: {
         orderBy: { sequence: "asc" },
@@ -172,6 +174,10 @@ export default async function AdminExamDetail({ params }: Props) {
         />
         <Stat label="Phases" value={exam.phases.length} />
       </div>
+
+      <Card className="mt-4">
+        <FeedKeywordsForm examId={exam.id} initial={exam.feedKeywords} />
+      </Card>
 
       <div className="mt-6 mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-bold text-ink">Phases</h2>

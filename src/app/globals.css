@@ -39,9 +39,11 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  /* Devanagari last before the generic family: none of the fonts ahead of it
+     carry Hindi glyphs, so Hindi falls through to it and Latin never does. */
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+    Arial, var(--font-devanagari), sans-serif;
 }
 
 /* The bottom nav is fixed at every breakpoint, so pages must reserve room for

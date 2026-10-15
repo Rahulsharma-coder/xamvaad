@@ -1,0 +1,37 @@
+# Announces new Sarkari Result entries about our exams as Official Updates.
+#
+# Every four hours: often enough that an admit card is on Xamvaad the same
+# morning, rarely enough that the feed is read six times a day. Vercel Cron on
+# the Hobby plan runs at most daily, which is why this lives here.
+#
+# Needs two repository secrets:
+#   CRON_SECRET  - the same value as the CRON_SECRET env var on Vercel
+#   SITE_URL     - optional, defaults to https://xamvaad.vercel.app
+
+name: Official feed
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would be published without publishing"
+        type: boolean
+        default: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Run the official feed
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: ${{ secrets.SITE_URL || 'https://xamvaad.vercel.app' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$SITE_URL/api/cron/official-feed?dryRun=$DRY_RUN"

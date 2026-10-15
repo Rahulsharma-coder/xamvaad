@@ -129,6 +129,13 @@ export const examSchema = z.object({
     .optional(),
 });
 
+/** The phrases that pick an exam out of the Sarkari Result feed. */
+export const feedKeywordsSchema = z.object({
+  feedKeywords: z
+    .array(z.string().trim().min(2, "A phrase needs at least two characters").max(80))
+    .max(20, "Keep it to 20 phrases"),
+});
+
 /** A tier of an exam: Tier 1, CBT 2, Prelims, Interview. */
 export const phaseSchema = z.object({
   examId: z.string().min(1, "Choose an exam"),

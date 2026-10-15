@@ -2,8 +2,43 @@ import { db } from "@/lib/db";
 import { ApiError, handler, ok } from "@/lib/api";
 import { assertBoardAllowed, requireAdminApi } from "@/lib/admin";
 import { audit } from "@/lib/audit";
+import { feedKeywordsSchema } from "@/lib/adminValidation";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+/**
+ * PATCH /api/admin/exams/:id — set the phrases the Sarkari Result feed is
+ * matched against. An empty list stops the exam being auto-announced.
+ */
+export const PATCH = handler(async (req: Request, ctx: Ctx) => {
+  const { id } = await ctx.params;
+  const scope = await requireAdminApi();
+  const { feedKeywords } = feedKeywordsSchema.parse(await req.json());
+
+  const exam = await db.exam.findUnique({
+    where: { id },
+    select: { id: true, name: true, boardId: true },
+  });
+  if (!exam) throw new ApiError(404, "That exam no longer exists.");
+  assertBoardAllowed(scope, exam.boardId);
+
+  // Case-insensitive duplicates would only make the list longer to read.
+  const unique = [
+    ...new Map(feedKeywords.map((p) => [p.toLowerCase(), p])).values(),
+  ];
+
+  await db.exam.update({ where: { id }, data: { feedKeywords: unique } });
+
+  await audit({
+    actor: scope.user,
+    action: "exam.feed_keywords",
+    targetType: "Exam",
+    targetId: id,
+    summary: `Set feed keywords for ${exam.name}: ${unique.join(", ") || "(none)"}`,
+  });
+
+  return ok({ feedKeywords: unique });
+});
 
 /**
  * DELETE /api/admin/exams/:id — remove an exam nobody has posted in.

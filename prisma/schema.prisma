@@ -136,6 +136,19 @@ enum NotificationType {
   MODERATION
 }
 
+/// What became of one Sarkari Result feed entry. Everything but PUBLISHED is a
+/// deliberate skip, kept so an admin can see why an update was not announced.
+enum FeedItemStatus {
+  PROCESSING
+  PUBLISHED
+  NO_EXAM_MATCH
+  AMBIGUOUS
+  OTHER_YEAR
+  UNKNOWN_TYPE
+  NO_OFFICIAL_LINK
+  FAILED
+}
+
 enum ReportReason {
   SPAM
   DUPLICATE
@@ -276,9 +289,16 @@ model Exam {
   /// Archived: read-only and hidden from active listings, but never deleted
   /// and still fully searchable — "Permanent Knowledge" is a product principle.
   archivedAt DateTime?
+
+  /// Phrases that identify this exam in the Sarkari Result feed, e.g.
+  /// "SSC CGL". A feed title matches when it contains one as whole words; a
+  /// phrase starting with "-" rules the exam out ("-Mains"). Empty means the
+  /// exam is never auto-announced.
+  feedKeywords String[] @default([])
   createdAt   DateTime @default(now())
 
   board     Board         @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  feedItems FeedItem[]
   phases    ExamPhase[]
   sessions  ExamSession[]
   posts     Post[]
@@ -402,6 +422,9 @@ model Post {
 
   /// Expected Cutoff only: how the author arrived at their numbers.
   cutoffBasis CutoffBasis?
+
+  /// Official Updates only: the board's own page or PDF the update is about.
+  sourceUrl String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -771,4 +794,27 @@ model Report {
   @@unique([reporterId, postId])
   @@unique([reporterId, commentId])
   @@index([status, createdAt])
+}
+
+/// One Sarkari Result feed entry the official-feed job has looked at.
+///
+/// key is the entry's guid plus the kind of update, so a page that is later
+/// retitled from "Online Form" to "Admit Card" is a new announcement, while
+/// the same entry seen on the next run is not.
+model FeedItem {
+  id          String         @id @default(cuid())
+  key         String         @unique
+  title       String
+  sourceUrl   String
+  publishedAt DateTime?
+  kind        String?
+  status      FeedItemStatus
+  examId      String?
+  postId      String?
+  officialUrl String?
+  createdAt   DateTime       @default(now())
+
+  exam Exam? @relation(fields: [examId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
 }

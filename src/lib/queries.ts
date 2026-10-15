@@ -137,6 +137,7 @@ export async function getPost(id: string) {
       ...postCardSelect,
       status: true,
       updatedAt: true,
+      sourceUrl: true,
       question: {
         select: {
           id: true,
