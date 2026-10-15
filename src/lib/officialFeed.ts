@@ -505,8 +505,17 @@ export function examLabel(exam: FeedExam): string {
   return label;
 }
 
-export function composePost(exam: FeedExam, kind: UpdateKind, feedTitle: string) {
-  const label = examLabel(exam);
+export function composePost(
+  exam: FeedExam,
+  kind: UpdateKind,
+  feedTitle: string,
+  phase: FeedPhase | null = null
+) {
+  // Name the tier when there is more than one: "admit card out" means nothing
+  // to an aspirant who can't tell whether it is for the written exam or the
+  // typing test.
+  const label =
+    phase && exam.phases.length > 1 ? `${examLabel(exam)} ${phase.name}` : examLabel(exam);
   return {
     title: `${label}: ${kind.headline(normalise(feedTitle))}`,
     body: `${kind.sentence(label)}\n\n${FOOTER}`,
@@ -633,16 +642,15 @@ async function evaluate(
   if (!kind) return { status: "UNKNOWN_TYPE", exam };
 
   const officialUrl = findOfficialLink(await fetchText(entry.link), kind);
+  const phase = resolvePhase(entry.title, exam.phases);
   if (!officialUrl) return { status: "NO_OFFICIAL_LINK", exam };
 
   return {
     status: "PUBLISHED",
     exam,
     officialUrl,
-    draft: composePost(exam, kind, entry.title),
-    stage: kind.stage
-      ? { stage: kind.stage, phase: resolvePhase(entry.title, exam.phases) }
-      : undefined,
+    draft: composePost(exam, kind, entry.title, phase),
+    stage: kind.stage ? { stage: kind.stage, phase } : undefined,
   };
 }
 
