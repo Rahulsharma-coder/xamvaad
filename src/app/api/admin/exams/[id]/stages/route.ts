@@ -8,7 +8,7 @@ import {
   updateStagesSchema,
 } from "@/lib/adminValidation";
 import { runDueAnnouncements, suppressPastAnnouncements } from "@/lib/announce";
-import { STAGE_LABEL } from "@/lib/lifecycle";
+import { STAGE_LABEL, stagesFor } from "@/lib/lifecycle";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -42,6 +42,7 @@ export const PATCH = handler(async (req: Request, ctx: Ctx) => {
     select: {
       id: true,
       name: true,
+      kind: true,
       stages: {
         select: {
           stage: true,
@@ -66,7 +67,11 @@ export const PATCH = handler(async (req: Request, ctx: Ctx) => {
 
   // Upsert so a stage missing from the table (older exams) is created rather
   // than silently skipped.
-  const order = ["CONDUCTED", "ANSWER_KEY_RELEASED", "OBJECTION_WINDOW", "FINAL_KEY", "RESULT"];
+  const order = stagesFor(phase.kind);
+  const foreign = input.stages.find((s) => !order.includes(s.stage));
+  if (foreign) {
+    throw new ApiError(400, `${phase.name} has no ${STAGE_LABEL[foreign.stage]} stage.`);
+  }
 
   for (const stage of input.stages) {
     const data = {

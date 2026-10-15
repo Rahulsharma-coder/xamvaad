@@ -8,6 +8,7 @@ import { PublishUpdateForm } from "@/components/admin/PublishUpdateForm";
 import { FeedAlert } from "@/components/admin/FeedAlert";
 import { FeedStageButtons } from "@/components/admin/FeedStageButtons";
 import { STAGE_LABEL } from "@/lib/lifecycle";
+import { phasesWithStage } from "@/lib/officialFeed";
 
 export const metadata = { title: "Official Updates" };
 export const dynamic = "force-dynamic";
@@ -78,7 +79,7 @@ export default async function AdminUpdatesPage({ searchParams }: Props) {
           select: {
             name: true,
             phases: {
-              select: { id: true, name: true },
+              select: { id: true, name: true, kind: true },
               orderBy: { sequence: "asc" },
             },
           },
@@ -203,7 +204,7 @@ export default async function AdminUpdatesPage({ searchParams }: Props) {
                     <FeedStageButtons
                       itemId={item.id}
                       stageLabel={STAGE_LABEL[item.stage]}
-                      phases={item.exam.phases}
+                      phases={phasesWithStage(item.exam.phases, item.stage)}
                     />
                   )}
                 </li>

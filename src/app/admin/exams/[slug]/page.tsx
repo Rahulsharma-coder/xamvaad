@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, ExternalLink } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdminPage, scopeAllowsBoard } from "@/lib/admin";
-import { deriveStageStatus, STAGE_ORDER } from "@/lib/lifecycle";
+import { deriveStageStatus, stagesFor } from "@/lib/lifecycle";
 import { PHASE_KIND_LABEL, phaseHasAnswerKey, phaseStatus } from "@/lib/phases";
 import { toDayInput } from "@/lib/adminValidation";
 import { Badge, Card, PageHeader, Stat } from "@/components/admin/ui";
@@ -186,7 +186,7 @@ export default async function AdminExamDetail({ params }: Props) {
 
       <div className="space-y-4">
         {exam.phases.map((phase) => {
-          const rows = STAGE_ORDER.map((stage) => {
+          const rows = stagesFor(phase.kind).map((stage) => {
             const existing = phase.stages.find((s) => s.stage === stage);
             const shape = existing ?? {
               stage,
@@ -259,6 +259,7 @@ export default async function AdminExamDetail({ params }: Props) {
                 <LifecycleEditor
                   examId={exam.id}
                   phaseId={phase.id}
+                  phase={{ kind: phase.kind, name: phase.name }}
                   initial={rows}
                   shiftRange={shiftRange}
                 />

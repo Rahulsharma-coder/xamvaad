@@ -1,9 +1,9 @@
 import { Prisma } from "@/prisma/client";
-import type { ExamStage, FeedItemStatus, FeedRunStatus } from "@/prisma/client";
+import type { ExamStage, FeedItemStatus, FeedRunStatus, PhaseKind } from "@/prisma/client";
 import { db } from "./db";
 import { audit } from "./audit";
 import { publishOfficialUpdate } from "./officialUpdates";
-import { STAGE_LABEL, STAGE_ORDER } from "./lifecycle";
+import { STAGE_LABEL, stagesFor } from "./lifecycle";
 import { istDay } from "./stageOps";
 import type { SessionUser } from "./auth";
 import { type Button, esc, notifyAdmins, siteUrl } from "./telegram";
@@ -96,6 +96,9 @@ const KINDS: UpdateKind[] = [
     headline: () => "एडमिट कार्ड जारी",
     sentence: (exam) =>
       `${exam} के एडमिट कार्ड जारी कर दिए गए हैं। आधिकारिक वेबसाइट से अपना एडमिट कार्ड डाउनलोड करें और परीक्षा केंद्र, तिथि व शिफ्ट जाँच लें।`,
+    // Only typing tests, PETs and the like track an admit card; on a written
+    // paper there is no such stage and nothing is marked.
+    stage: "ADMIT_CARD",
   },
   {
     id: "EXAM_CITY",
@@ -234,7 +237,7 @@ export type FeedExam = {
   phases: FeedPhase[];
 };
 
-type FeedPhase = { id: string; name: string; shortName: string };
+type FeedPhase = { id: string; name: string; shortName: string; kind: PhaseKind };
 
 type ExamMatch =
   | { kind: "match"; exam: FeedExam }
@@ -332,6 +335,30 @@ export function resolvePhase(title: string, phases: FeedPhase[]): FeedPhase | nu
   return named.length === 1 ? named[0]! : null;
 }
 
+/** The phases that have this stage at all: an admit card only off paper. */
+export function phasesWithStage<T extends { kind: PhaseKind }>(phases: T[], stage: ExamStage): T[] {
+  return phases.filter((p) => stagesFor(p.kind).includes(stage));
+}
+
+/**
+ * The stage an update marks, and on which phase.
+ *
+ * Nothing when no phase of the exam has that stage (an admit card for a
+ * written-only exam) or when the title names a phase without it. A phase
+ * left null is for an admin to choose, from the phases that do have it.
+ */
+function stageFor(
+  kind: UpdateKind,
+  phase: FeedPhase | null,
+  phases: FeedPhase[]
+): { stage: ExamStage; phase: FeedPhase | null } | undefined {
+  if (!kind.stage) return undefined;
+  const eligible = phasesWithStage(phases, kind.stage);
+  if (eligible.length === 0) return undefined;
+  if (phase) return eligible.includes(phase) ? { stage: kind.stage, phase } : undefined;
+  return { stage: kind.stage, phase: null };
+}
+
 /**
  * Marks a stage as having happened on the day of the update.
  *
@@ -349,7 +376,7 @@ export async function markStageFromFeed(
 ): Promise<{ marked: boolean; note: string; phaseName: string }> {
   const day = istDay(at);
   const [phase, existing] = await Promise.all([
-    db.examPhase.findUniqueOrThrow({ where: { id: phaseId }, select: { name: true } }),
+    db.examPhase.findUniqueOrThrow({ where: { id: phaseId }, select: { name: true, kind: true } }),
     db.examStageEntry.findUnique({
       where: { phaseId_stage: { phaseId, stage } },
       select: { startsAt: true, statusOverride: true },
@@ -368,7 +395,7 @@ export async function markStageFromFeed(
   const data = { startsAt: day, startAnnouncedAt: new Date() };
   await db.examStageEntry.upsert({
     where: { phaseId_stage: { phaseId, stage } },
-    create: { phaseId, stage, sortOrder: STAGE_ORDER.indexOf(stage) + 1, ...data },
+    create: { phaseId, stage, sortOrder: stagesFor(phase.kind).indexOf(stage) + 1, ...data },
     update: data,
   });
 
@@ -409,9 +436,12 @@ export async function resolveFeedItemStage(input: {
 
   const phase = await db.examPhase.findFirst({
     where: { id: input.phaseId, examId: item.exam.id },
-    select: { id: true },
+    select: { id: true, name: true, kind: true },
   });
   if (!phase) throw new FeedStageError(400, "That phase doesn't belong to this exam.");
+  if (!stagesFor(phase.kind).includes(item.stage)) {
+    throw new FeedStageError(400, `${phase.name} has no ${STAGE_LABEL[item.stage]} stage.`);
+  }
 
   const result = await markStageFromFeed(phase.id, item.stage, item.publishedAt ?? item.createdAt);
 
@@ -650,7 +680,7 @@ async function evaluate(
     exam,
     officialUrl,
     draft: composePost(exam, kind, entry.title, phase),
-    stage: kind.stage ? { stage: kind.stage, phase } : undefined,
+    stage: stageFor(kind, phase, exam.phases),
   };
 }
 
@@ -761,7 +791,7 @@ async function processFeed(
       feedKeywords: true,
       board: { select: { name: true } },
       phases: {
-        select: { id: true, name: true, shortName: true },
+        select: { id: true, name: true, shortName: true, kind: true },
         orderBy: { sequence: "asc" },
       },
     },
@@ -881,7 +911,12 @@ async function processFeed(
       if (postId && outcome.draft && outcome.exam) {
         const unclear = outcome.stage && !stagePhaseId && outcome.exam.phases.length > 0;
         const rows: Button[][] = unclear
-          ? [outcome.exam.phases.map((p) => ({ text: p.name, data: `fs:${item.id}:${p.id}` }))]
+          ? [
+              phasesWithStage(outcome.exam.phases, outcome.stage!.stage).map((p) => ({
+                text: p.name,
+                data: `fs:${item.id}:${p.id}`,
+              })),
+            ]
           : [];
         rows.push([{ text: "Post dekho", url: `${siteUrl()}/posts/${postId}` }]);
         await notifyAdmins(

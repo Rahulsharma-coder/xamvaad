@@ -54,6 +54,8 @@ export function ExamOpsCard({ exam }: { exam: ExamOpsExam }) {
   const byStage = (stage: ExamStage) =>
     phase?.stages.find((s) => s.stage === stage) ?? null;
 
+  const written = !phase || phase.kind === "WRITTEN";
+  const admitCard = byStage("ADMIT_CARD");
   const conducted = byStage("CONDUCTED");
   const answerKey = byStage("ANSWER_KEY_RELEASED");
   const objection = byStage("OBJECTION_WINDOW");
@@ -63,7 +65,7 @@ export function ExamOpsCard({ exam }: { exam: ExamOpsExam }) {
     row ? deriveStageStatus(row) : "PENDING";
 
   const archived = Boolean(exam.archivedAt);
-  const objectionOpen = status(objection) === "ACTIVE";
+  const objectionOpen = written && status(objection) === "ACTIVE";
   const examUnderWay = status(conducted) === "ACTIVE";
   const resultDone = status(result) === "DONE";
 
@@ -96,8 +98,16 @@ export function ExamOpsCard({ exam }: { exam: ExamOpsExam }) {
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 border-t border-hairline pt-3">
+        {/* A typing test or PET has no answer key or objections; what is
+            worth a glance is the admit card, the day and the result. */}
+        {!written && (
+          <DateCell
+            label="Admit card"
+            value={admitCard?.startsAt ? shortDate(admitCard.startsAt) : "TBA"}
+          />
+        )}
         <DateCell
-          label="Exam window"
+          label={written ? "Exam window" : phase!.name}
           value={
             conducted?.startsAt || conducted?.endsAt
               ? dateRange(conducted.startsAt, conducted.endsAt)
@@ -105,19 +115,23 @@ export function ExamOpsCard({ exam }: { exam: ExamOpsExam }) {
           }
           highlight={examUnderWay}
         />
-        <DateCell
-          label="Answer key"
-          value={answerKey?.startsAt ? shortDate(answerKey.startsAt) : "TBA"}
-        />
-        <DateCell
-          label="Objection window"
-          value={
-            objection?.startsAt || objection?.endsAt
-              ? dateRange(objection.startsAt, objection.endsAt)
-              : "TBA"
-          }
-          highlight={objectionOpen}
-        />
+        {written && (
+          <>
+            <DateCell
+              label="Answer key"
+              value={answerKey?.startsAt ? shortDate(answerKey.startsAt) : "TBA"}
+            />
+            <DateCell
+              label="Objection window"
+              value={
+                objection?.startsAt || objection?.endsAt
+                  ? dateRange(objection.startsAt, objection.endsAt)
+                  : "TBA"
+              }
+              highlight={objectionOpen}
+            />
+          </>
+        )}
         <DateCell
           label="Final result"
           value={result?.startsAt ? shortDate(result.startsAt) : "TBA"}

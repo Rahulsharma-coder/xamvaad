@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Check, FileText, Flag, Gavel, Trophy } from "lucide-react";
+import { Check, FileText, Flag, Gavel, Ticket, Trophy } from "lucide-react";
 import type { ExamStage, StageStatus } from "@/prisma/client";
 import { dateRange, shortDate } from "@/lib/format";
 import { stageHasEnd } from "@/lib/lifecycle";
@@ -15,6 +15,7 @@ const STAGE_META: Record<
   ExamStage,
   { label: string; icon: typeof Check }
 > = {
+  ADMIT_CARD: { label: "Admit Card", icon: Ticket },
   CONDUCTED: { label: "Exam Window", icon: Check },
   ANSWER_KEY_RELEASED: { label: "Ans Key Released", icon: FileText },
   OBJECTION_WINDOW: { label: "Objection Window", icon: Gavel },
@@ -23,8 +24,9 @@ const STAGE_META: Record<
 };
 
 type Stage = {
-  id: string;
   stage: ExamStage;
+  /** Overrides the stage's usual name — "Typing Test" for a typing test's day. */
+  label?: string;
   status: StageStatus;
   startsAt: Date | string | null;
   endsAt: Date | string | null;
@@ -59,7 +61,7 @@ export function LifecycleStepper({ stages }: { stages: Stage[] }) {
 
           return (
             <li
-              key={stage.id}
+              key={stage.stage}
               className="relative flex min-w-[5.5rem] flex-1 flex-col items-center text-center"
             >
               {/* Connector to the previous node. */}
@@ -92,7 +94,7 @@ export function LifecycleStepper({ stages }: { stages: Stage[] }) {
                   isActive ? "text-brand-700" : "text-ink"
                 )}
               >
-                {meta.label}
+                {stage.label ?? meta.label}
               </span>
               <span
                 className={clsx(

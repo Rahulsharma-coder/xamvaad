@@ -5,6 +5,7 @@ import { STAGE_LABEL } from "./lifecycle";
 /** Schemas for the admin API. Kept apart so the public rules stay readable. */
 
 export const STAGE_KEYS = [
+  "ADMIT_CARD",
   "CONDUCTED",
   "ANSWER_KEY_RELEASED",
   "OBJECTION_WINDOW",

@@ -1,7 +1,7 @@
 import type { ExamStage, StageStatus } from "@/prisma/client";
 import { db } from "./db";
 import type { SessionUser } from "./auth";
-import { STAGE_LABEL, STAGE_ORDER, deriveStageStatus, stageHasEnd } from "./lifecycle";
+import { STAGE_LABEL, deriveStageStatus, phaseStages, stageHasEnd, stageLabel, stagesFor } from "./lifecycle";
 import { VISIBLE_POST } from "./queries";
 import { getFeedAlert } from "./feedHealth";
 import { dateTime } from "./format";
@@ -49,6 +49,7 @@ export type TgUpdate = { message?: TgMessage; callback_query?: TgCallback };
 type Screen = { text: string; rows: Button[][] };
 
 const CODE: Record<ExamStage, string> = {
+  ADMIT_CARD: "K",
   CONDUCTED: "C",
   ANSWER_KEY_RELEASED: "A",
   OBJECTION_WINDOW: "O",
@@ -274,20 +275,20 @@ async function phasesScreen(examId: string): Promise<Screen> {
 
 async function stagesScreen(phaseId: string): Promise<Screen> {
   const phase = await loadPhase(phaseId);
-  const lines = STAGE_ORDER.map((stage) => {
-    const entry = phase.stages.find((s) => s.stage === stage) ?? emptyStage(stage);
+  const entries = phaseStages(phase.kind, phase.stages);
+  const lines = entries.map((entry) => {
     const status = deriveStageStatus(entry);
     const manual = entry.statusOverride ? " (manual)" : "";
-    return `${ICON[status]} ${STAGE_LABEL[stage]} — ${formatStageDates(entry.startsAt, entry.endsAt)}${manual}`;
+    return `${ICON[status]} ${stageLabel(entry.stage, phase)} — ${formatStageDates(entry.startsAt, entry.endsAt)}${manual}`;
   });
 
-  const buttons = STAGE_ORDER.map((stage) => ({ text: STAGE_LABEL[stage], data: `sg:${phaseId}:${CODE[stage]}` }));
+  const buttons = entries.map(({ stage }) => ({ text: stageLabel(stage, phase), data: `sg:${phaseId}:${CODE[stage]}` }));
+  const buttonRows: Button[][] = [];
+  for (let i = 0; i < buttons.length; i += 2) buttonRows.push(buttons.slice(i, i + 2));
   return {
     text: `<b>${esc(phaseTitle(phase))}</b>\n\n${lines.join("\n")}`,
     rows: [
-      buttons.slice(0, 2),
-      buttons.slice(2, 4),
-      buttons.slice(4),
+      ...buttonRows,
       [
         phase.exam.phases.length > 1
           ? { text: "« Phases", data: `ex:${phase.exam.id}` }
@@ -322,12 +323,12 @@ async function stageScreen(phaseId: string, stage: ExamStage): Promise<Screen> {
 
   return {
     text:
-      `<b>${esc(phaseTitle(phase))} · ${STAGE_LABEL[stage]}</b>\n\n` +
+      `<b>${esc(phaseTitle(phase))} · ${stageLabel(stage, phase)}</b>\n\n` +
       `Abhi: ${ICON[status]} ${formatStageDates(entry.startsAt, entry.endsAt)}` +
       (entry.statusOverride ? ` (manual: ${entry.statusOverride.toLowerCase()})` : "") +
       (stage === "OBJECTION_WINDOW"
         ? "\n\n⚠️ Isi window se tay hota hai ki users objection post kar sakte hain ya nahi."
-        : stage === "CONDUCTED"
+        : stage === "CONDUCTED" && phase.kind === "WRITTEN"
           ? "\n\n⚠️ Exam Window shuru hone par hi Memory Question aur Cutoff posts khulte hain."
           : ""),
     rows,
@@ -347,7 +348,7 @@ async function confirmScreen(phaseId: string, stage: ExamStage, op: string): Pro
         : "<b>TBA</b> karoon? Dates aur override dono hat jayenge.";
 
   return {
-    text: `<b>${esc(phaseTitle(phase))} · ${STAGE_LABEL[stage]}</b>\n\n${what}`,
+    text: `<b>${esc(phaseTitle(phase))} · ${stageLabel(stage, phase)}</b>\n\n${what}`,
     rows: [
       [
         { text: "✅ Haan", data: `ok:${phaseId}:${CODE[stage]}:${op}` },
@@ -373,7 +374,7 @@ async function feedScreen(): Promise<Screen> {
         stage: true,
         stagePhaseId: true,
         createdAt: true,
-        exam: { select: { phases: { select: { id: true, name: true }, orderBy: { sequence: "asc" } } } },
+        exam: { select: { phases: { select: { id: true, name: true, kind: true }, orderBy: { sequence: "asc" } } } },
       },
     }),
   ]);
@@ -397,7 +398,12 @@ async function feedScreen(): Promise<Screen> {
   for (const item of items) {
     if (!item.stage || item.stagePhaseId || !item.exam) continue;
     rows.push([{ text: `${STAGE_LABEL[item.stage]} kis phase ka? (${item.title.slice(0, 30)}…)`, data: "noop" }]);
-    rows.push(item.exam.phases.map((p) => ({ text: p.name, data: `fs:${item.id}:${p.id}` })));
+    const stage = item.stage;
+    rows.push(
+      item.exam.phases
+        .filter((p) => stagesFor(p.kind).includes(stage))
+        .map((p) => ({ text: p.name, data: `fs:${item.id}:${p.id}` }))
+    );
   }
 
   return {
@@ -441,7 +447,7 @@ async function promptDates(chatId: number, phaseId: string, stage: ExamStage) {
 
   await send(
     chatId,
-    `<b>${esc(phase.exam.name)} · <a href="${link}">${esc(phase.name)}</a> · ${STAGE_LABEL[stage]}</b>\n\nIs message ka reply karke date likho, jaise ${example}.`,
+    `<b>${esc(phase.exam.name)} · <a href="${link}">${esc(phase.name)}</a> · ${stageLabel(stage, phase)}</b>\n\nIs message ka reply karke date likho, jaise ${example}.`,
     undefined,
     { reply_markup: { force_reply: true, input_field_placeholder: stageHasEnd(stage) ? "4-10 Oct" : "15 Oct" } }
   );
@@ -516,6 +522,7 @@ async function loadPhase(phaseId: string) {
     select: {
       id: true,
       name: true,
+      kind: true,
       exam: {
         select: { id: true, name: true, slug: true, year: true, phases: { select: { id: true } } },
       },

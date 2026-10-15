@@ -2,7 +2,7 @@ import type { ExamStage, StageStatus } from "@/prisma/client";
 import { db } from "./db";
 import { audit } from "./audit";
 import { runDueAnnouncements } from "./announce";
-import { STAGE_LABEL, STAGE_ORDER, stageHasEnd } from "./lifecycle";
+import { STAGE_LABEL, stageHasEnd, stageLabel, stagesFor } from "./lifecycle";
 import type { SessionUser } from "./auth";
 
 /**
@@ -37,12 +37,16 @@ export async function applyStageChange(input: {
     select: {
       id: true,
       name: true,
+      kind: true,
       exam: { select: { id: true, name: true, archivedAt: true } },
     },
   });
   if (!phase) throw new Error("That phase no longer exists.");
   if (phase.exam.archivedAt) {
     throw new Error(`${phase.exam.name} is archived. Restore it before editing.`);
+  }
+  if (!stagesFor(phase.kind).includes(stage)) {
+    throw new Error(`${phase.name} has no ${STAGE_LABEL[stage]} stage.`);
   }
 
   if (change.kind === "dates") {
@@ -65,7 +69,7 @@ export async function applyStageChange(input: {
 
   await db.examStageEntry.upsert({
     where: { phaseId_stage: { phaseId, stage } },
-    create: { phaseId, stage, sortOrder: STAGE_ORDER.indexOf(stage) + 1, ...data },
+    create: { phaseId, stage, sortOrder: stagesFor(phase.kind).indexOf(stage) + 1, ...data },
     update: data,
   });
 
@@ -73,7 +77,7 @@ export async function applyStageChange(input: {
 
   const what =
     change.kind === "dates"
-      ? `set ${STAGE_LABEL[stage]} to ${formatStageDates(change.startsAt, change.endsAt)}`
+      ? `set ${stageLabel(stage, phase)} to ${formatStageDates(change.startsAt, change.endsAt)}`
       : change.kind === "override"
         ? change.status
           ? `pinned ${STAGE_LABEL[stage]} as ${change.status.toLowerCase()}`

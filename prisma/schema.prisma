@@ -102,6 +102,9 @@ enum PhaseKind {
 /// a tier of the exam itself. "SSC CGL 2026 Tier 2" is a phase; "objection
 /// window" is a stage within it.
 enum ExamStage {
+  /// Non-written phases only: a typing test, PET or interview has an admit
+  /// card, a date and a result, and none of the answer-key stages.
+  ADMIT_CARD
   CONDUCTED
   ANSWER_KEY_RELEASED
   OBJECTION_WINDOW

@@ -1,4 +1,4 @@
-import type { ExamStage, StageStatus } from "@/prisma/client";
+import type { ExamStage, PhaseKind, StageStatus } from "@/prisma/client";
 
 /**
  * Exam lifecycle status, derived from dates.
@@ -138,6 +138,7 @@ export function currentStage(
   return done.length ? done[done.length - 1]!.stage : null;
 }
 
+/** A written paper's lifecycle: sat, keyed, challenged, settled, scored. */
 export const STAGE_ORDER: ExamStage[] = [
   "CONDUCTED",
   "ANSWER_KEY_RELEASED",
@@ -146,7 +147,48 @@ export const STAGE_ORDER: ExamStage[] = [
   "RESULT",
 ];
 
+/**
+ * Every other phase — typing test, PET, interview, DV — has no answer key to
+ * release or challenge. What candidates wait for is the admit card, the day
+ * itself and the result.
+ */
+export const NON_WRITTEN_STAGES: ExamStage[] = ["ADMIT_CARD", "CONDUCTED", "RESULT"];
+
+/** The stages a phase of this kind goes through, in order. */
+export function stagesFor(kind: PhaseKind): ExamStage[] {
+  return kind === "WRITTEN" ? STAGE_ORDER : NON_WRITTEN_STAGES;
+}
+
+/**
+ * A stage's name for one phase. "Exam Window" is right for a written paper;
+ * on a typing test the day itself is better called by the phase's own name.
+ */
+export function stageLabel(stage: ExamStage, phase?: { kind: PhaseKind; name: string }): string {
+  if (stage === "CONDUCTED" && phase && phase.kind !== "WRITTEN") return phase.name;
+  return STAGE_LABEL[stage];
+}
+
+/**
+ * A phase's stages in display order, with any it has no row for yet shown as
+ * TBA. Phases created before a stage existed (Admit Card) have no row for it.
+ */
+export function phaseStages<T extends StageDates>(
+  kind: PhaseKind,
+  stages: T[]
+): (T | (StageDates & { stage: ExamStage }))[] {
+  return stagesFor(kind).map(
+    (stage) =>
+      stages.find((s) => s.stage === stage) ?? {
+        stage,
+        statusOverride: null,
+        startsAt: null,
+        endsAt: null,
+      }
+  );
+}
+
 export const STAGE_LABEL: Record<ExamStage, string> = {
+  ADMIT_CARD: "Admit Card",
   CONDUCTED: "Exam Window",
   ANSWER_KEY_RELEASED: "Answer Key Released",
   OBJECTION_WINDOW: "Objection Window",
@@ -166,6 +208,7 @@ export const STAGE_ANNOUNCEMENT: Record<
     start: "has begun — you can now post memory questions and cutoff estimates",
     end: "is over — all shifts have now been conducted",
   },
+  ADMIT_CARD: { start: "admit card is out", end: null },
   ANSWER_KEY_RELEASED: { start: "answer key has been released", end: null },
   OBJECTION_WINDOW: {
     start: "objection window is now open",

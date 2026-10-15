@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { FeedSkeleton, TrackerSkeleton } from "@/components/Skeletons";
-import { deriveStageStatus, withDerivedStatus } from "@/lib/lifecycle";
+import { deriveStageStatus, phaseStages, stageLabel, withDerivedStatus } from "@/lib/lifecycle";
 import { phaseHasAnswerKey, phaseStatus, pickDefaultPhase } from "@/lib/phases";
 import { PhasePicker } from "@/components/PhasePicker";
 import { runDueAnnouncements } from "@/lib/announce";
@@ -154,7 +154,17 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
       <main className="mx-auto max-w-3xl px-4 py-4">
         {/* The lifecycle belongs to the selected tier: Tier 1's objection
             window closes months before Tier 2's opens. */}
-        <LifecycleStepper stages={withDerivedStatus(activePhase.stages)} />
+        <LifecycleStepper
+          stages={withDerivedStatus(phaseStages(activePhase.kind, activePhase.stages)).map(
+            (stage) => ({
+              ...stage,
+              label:
+                stage.stage === "CONDUCTED" && activePhase.kind !== "WRITTEN"
+                  ? stageLabel(stage.stage, activePhase)
+                  : undefined,
+            })
+          )}
+        />
 
         {phaseSessions.length === 0 && (
           <p className="mt-4 rounded-xl border border-dashed border-hairline bg-surface p-4 text-center text-sm text-ink-muted">

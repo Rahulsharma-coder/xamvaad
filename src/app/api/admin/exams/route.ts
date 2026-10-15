@@ -3,7 +3,7 @@ import { ApiError, handler, ok } from "@/lib/api";
 import { requireFullAdminApi } from "@/lib/admin";
 import { audit } from "@/lib/audit";
 import { examSchema } from "@/lib/adminValidation";
-import { STAGE_ORDER } from "@/lib/lifecycle";
+import { stagesFor } from "@/lib/lifecycle";
 import { slugify } from "@/lib/slug";
 
 /**
@@ -53,7 +53,7 @@ export const POST = handler(async (req: Request) => {
           kind: first.kind,
           sequence: 1,
           stages: {
-            create: STAGE_ORDER.map((stage, index) => ({
+            create: stagesFor(first.kind).map((stage, index) => ({
               stage,
               sortOrder: index + 1,
             })),

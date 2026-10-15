@@ -6,8 +6,8 @@ import { Info, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import { api } from "@/lib/client";
 import { inputClass } from "./ui";
-import { STAGE_LABEL, stageHasEnd } from "@/lib/lifecycle";
-import type { ExamStage, StageStatus } from "@/prisma/client";
+import { stageHasEnd, stageLabel } from "@/lib/lifecycle";
+import type { ExamStage, PhaseKind, StageStatus } from "@/prisma/client";
 
 type Row = {
   stage: ExamStage;
@@ -19,14 +19,6 @@ type Row = {
   derived: StageStatus;
 };
 
-const ORDER: ExamStage[] = [
-  "CONDUCTED",
-  "ANSWER_KEY_RELEASED",
-  "OBJECTION_WINDOW",
-  "FINAL_KEY",
-  "RESULT",
-];
-
 /** Hints shown under the stage name, where the meaning isn't obvious. */
 const STAGE_HINT: Partial<Record<ExamStage, string>> = {
   CONDUCTED:
@@ -37,12 +29,16 @@ const STAGE_HINT: Partial<Record<ExamStage, string>> = {
 export function LifecycleEditor({
   examId,
   phaseId,
+  phase,
   initial,
   shiftRange,
 }: {
   examId: string;
   /** The tier whose lifecycle this edits — each has its own. */
   phaseId: string;
+  /** Names the stages: a typing test's day is "Typing Test", not "Exam Window". */
+  phase: { kind: PhaseKind; name: string };
+  /** One row per stage this kind of phase has, already in order. */
   initial: Row[];
   /**
    * First and last sitting already defined under Shifts & Tags. The exam
@@ -114,16 +110,16 @@ export function LifecycleEditor({
             </tr>
           </thead>
           <tbody className="divide-y divide-hairline">
-            {ORDER.map((stage) => {
-              const row = rows.find((r) => r.stage === stage)!;
+            {rows.map((row) => {
+              const stage = row.stage;
               const rangeStage = stageHasEnd(stage);
-              const hint = STAGE_HINT[stage];
+              const hint = phase.kind === "WRITTEN" ? STAGE_HINT[stage] : undefined;
 
               return (
                 <tr key={stage}>
                   <td className="py-2.5 pr-3 align-top">
                     <span className="font-semibold text-ink">
-                      {STAGE_LABEL[stage]}
+                      {stageLabel(stage, phase)}
                     </span>
                     {hint && (
                       <span className="mt-0.5 block max-w-[13rem] text-[10px] leading-tight text-ink-muted">
