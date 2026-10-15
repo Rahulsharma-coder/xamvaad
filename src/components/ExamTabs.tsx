@@ -1,9 +1,10 @@
 import Link from "next/link";
 import clsx from "clsx";
 
-export type TabKey = "discussion" | "polls" | "memory" | "updates" | "objections";
+export type TabKey = "all" | "discussion" | "polls" | "memory" | "updates" | "objections";
 
 const TABS: { key: TabKey; label: string; badge?: string }[] = [
+  { key: "all", label: "All" },
   { key: "discussion", label: "Discussion" },
   { key: "polls", label: "Polls" },
   { key: "memory", label: "Memory Qs" },

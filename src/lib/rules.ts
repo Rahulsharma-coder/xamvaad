@@ -232,12 +232,14 @@ export function dateTagLabel(date: Date): string {
  * with one date and shift both mislabels it and hides it from everyone viewing
  * a different shift. Authors can still add a shift by hand as a manual tag.
  */
+export const SHIFT_SCOPED_TYPES: PostType[] = [
+  "MEMORY_QUESTION",
+  "OBJECTION_QUESTION",
+  "EXPECTED_CUTOFF",
+];
+
 export function isShiftScoped(type: PostType): boolean {
-  return (
-    type === "MEMORY_QUESTION" ||
-    type === "OBJECTION_QUESTION" ||
-    type === "EXPECTED_CUTOFF"
-  );
+  return SHIFT_SCOPED_TYPES.includes(type);
 }
 
 export function autoTagsFor(input: {

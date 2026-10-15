@@ -36,8 +36,8 @@ export async function generateMetadata({ params }: Props) {
   return { title: exam?.name ?? "Exam" };
 }
 
-/** Which post types each tab shows. */
-const TAB_TYPES: Record<Exclude<TabKey, "objections">, PostType[]> = {
+/** Which post types each tab shows. "all" is every type, handled on its own. */
+const TAB_TYPES: Record<Exclude<TabKey, "objections" | "all">, PostType[]> = {
   discussion: ["DISCUSSION", "EXPECTED_CUTOFF"],
   polls: ["POLL"],
   memory: ["MEMORY_QUESTION"],
@@ -70,7 +70,9 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
   // Non-written phases have no answer key, so no questions to remember,
   // challenge or poll about — those tabs would only ever be empty.
   const hasKey = phaseHasAnswerKey(activePhase.kind);
-  const rawTabKey: TabKey = isTab(rawTab) ? rawTab : "discussion";
+  // All first: someone arriving at an exam wants to see what's happening in
+  // it, not to have picked a category already.
+  const rawTabKey: TabKey = isTab(rawTab) ? rawTab : "all";
   const tab: TabKey =
     !hasKey && (rawTabKey === "memory" || rawTabKey === "objections" || rawTabKey === "polls")
       ? "discussion"
@@ -169,7 +171,18 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
             body waits on its queries. `key` re-arms the skeleton when you
             switch tab or shift, instead of leaving the old list on screen. */}
         <div className="mt-4">
-          {tab === "objections" ? (
+          {tab === "all" ? (
+            <Suspense
+              key={`${activePhase.slug}-all-${activeSession?.id ?? "all"}`}
+              fallback={<FeedSkeleton />}
+            >
+              <AllTab
+                examSlug={exam.slug}
+                phaseId={activePhase.id}
+                sessionId={activeSession?.id}
+              />
+            </Suspense>
+          ) : tab === "objections" ? (
             <Suspense
               key={`objections-${activePhase.slug}-${activeSession?.id ?? "all"}`}
               fallback={<TrackerSkeleton />}
@@ -200,6 +213,48 @@ export default async function ExamHubPage({ params, searchParams }: Props) {
         </div>
       </main>
     </div>
+  );
+}
+
+/**
+ * Every post in the tier, newest first with pinned updates on top. Scoped the
+ * way each tab scopes its own types — shift-bound posts to the chosen sitting,
+ * the rest across the tier — so All is exactly the other tabs put together.
+ */
+async function AllTab({
+  examSlug,
+  phaseId,
+  sessionId,
+}: {
+  examSlug: string;
+  phaseId: string;
+  sessionId?: string;
+}) {
+  const { posts } = await getFeed(
+    { examSlug, phaseId, sessionForShiftScoped: sessionId, sort: "latest" },
+    { take: 30 }
+  );
+
+  if (posts.length === 0) {
+    return (
+      <EmptyState
+        title="No posts yet"
+        body="Be the first: ask how the paper felt, what to revise, or what everyone expects the cutoff to be."
+        action={{ href: "/create", label: "Create Post" }}
+      />
+    );
+  }
+
+  return (
+    <section aria-label="All posts">
+      <ul className="space-y-3">
+        {posts.map((post) => (
+          <li key={post.id}>
+            <PostCard post={post} />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -322,6 +377,7 @@ async function ObjectionsTab({
 
 function isTab(value: string | undefined): value is TabKey {
   return (
+    value === "all" ||
     value === "discussion" ||
     value === "polls" ||
     value === "memory" ||

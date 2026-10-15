@@ -1,5 +1,6 @@
 import type { Prisma, PostType } from "@/prisma/client";
 import { db } from "./db";
+import { SHIFT_SCOPED_TYPES } from "./rules";
 
 /**
  * Shared read queries used by both server components and route handlers, so
@@ -52,6 +53,13 @@ export type FeedFilters = {
   /** Restrict to one tier. Tier 2 discussion must not surface under Tier 1. */
   phaseId?: string;
   sessionId?: string;
+  /**
+   * Narrows only the shift-scoped types (memory questions, objections,
+   * cutoffs) to this sitting, leaving discussions, polls and updates — which
+   * belong to the whole tier — untouched. What a mixed list like the exam's
+   * All tab needs; `sessionId` would hide everything not tied to a shift.
+   */
+  sessionForShiftScoped?: string;
   date?: string;
   shift?: string;
   type?: PostType;
@@ -82,7 +90,22 @@ export function buildFeedWhere(filters: FeedFilters): Prisma.PostWhereInput {
 
   if (filters.boardSlug) where.board = { slug: filters.boardSlug };
   if (filters.examSlug) where.exam = { slug: filters.examSlug };
-  if (filters.phaseId) where.phaseId = filters.phaseId;
+  const and: Prisma.PostWhereInput[] = [];
+
+  // A post with no phase is about the whole exam — an Official Update about
+  // dates, a general discussion — so it belongs under every tier. Filtering
+  // on the phase alone hid them from the exam page entirely.
+  if (filters.phaseId) {
+    and.push({ OR: [{ phaseId: filters.phaseId }, { phaseId: null }] });
+  }
+  if (filters.sessionForShiftScoped) {
+    and.push({
+      OR: [
+        { type: { notIn: SHIFT_SCOPED_TYPES } },
+        { sessionId: filters.sessionForShiftScoped },
+      ],
+    });
+  }
   if (filters.type) where.type = filters.type;
   if (filters.authorId) where.authorId = filters.authorId;
 
@@ -105,6 +128,8 @@ export function buildFeedWhere(filters: FeedFilters): Prisma.PostWhereInput {
   if (filters.savedByUserId) {
     where.saves = { some: { userId: filters.savedByUserId } };
   }
+
+  if (and.length > 0) where.AND = and;
 
   return where;
 }
